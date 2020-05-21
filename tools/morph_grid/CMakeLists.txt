@@ -3,6 +3,8 @@ CMAKE_MINIMUM_REQUIRED(VERSION 3.1)
 SET(EXECUTABLE_NAME morph_grid)
 
 SET(SRC
+	voronoi_tessellation.cpp
+	voronoi_tessellation.hpp
 	bilateral_filter_future.cpp
 	bilateral_filter_future.hpp
 	canny_future.cpp
