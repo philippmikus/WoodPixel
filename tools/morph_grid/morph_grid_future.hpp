@@ -163,6 +163,11 @@ public:
     m_update = true;
   }
 
+  void set_poisson_samples(std::vector<cv::Point2f> samples) 
+  {
+      m_poisson_samples = samples;
+  }
+
   void select_grid_point(int p_x, int p_y);
   void deselect_grid_point(int p_x, int p_y, bool shift_pressed);
 
@@ -214,6 +219,8 @@ private:
   cv::Mat m_distance_grad_x, m_distance_grad_y;
 
   std::string m_message;
+
+  std::vector<cv::Point2f> m_poisson_samples;
 
   std::vector<PatchRegion> m_patches;
   std::vector<BezierCurve> m_curves_fitted;

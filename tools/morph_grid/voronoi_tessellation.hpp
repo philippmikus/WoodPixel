@@ -13,8 +13,8 @@ public:
 	m_height(image.rows),
 	m_seed_count(seed_count)
 	{}
-
-	void poisson_disk_sampling(int iterations);
+	void VoronoiTessellation::clip_facets();
+	std::vector<Point2f> poisson_disk_sampling(int iterations);
 	void voronoi_tiles(std::vector<Point2f> seeds);
 	std::vector<Point2f> lloyds_relaxation();
 private:

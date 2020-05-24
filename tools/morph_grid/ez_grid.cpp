@@ -45,6 +45,7 @@ EZGrid::EZGrid(cv::Mat image, cv::Mat image_filtered, int grid_size, const boost
   m_canny_bilateral_future = std::make_unique<CannyFuture>(m_gui_name, "cannyBilateral");
   m_canny_filtered_future = std::make_unique<CannyFuture>(m_gui_name, "cannyFiltered");
   m_morph_grid_future = std::make_unique<MorphGridFuture>(m_window_name, image, grid_size);
+  m_voronoi_tessellation = std::make_unique<VoronoiTessellation>(image, 50);
 
   m_canny_filtered_future->set_image(image_filtered);
   m_morph_grid_future->set_image_filtered(image_filtered);
@@ -55,6 +56,9 @@ void EZGrid::run()
   int key = -1;
   Timer<boost::milli> t;
   int remaining = 1;
+
+  std::vector<cv::Point2f> samples = m_voronoi_tessellation->poisson_disk_sampling(100);
+  m_morph_grid_future->set_poisson_samples(samples);
 
   do
   {

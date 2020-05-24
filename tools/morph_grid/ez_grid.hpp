@@ -29,6 +29,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "bilateral_filter_future.hpp"
 #include "canny_future.hpp"
 #include "morph_grid_future.hpp"
+#include "voronoi_tessellation.hpp"
 #include "serializable.hpp"
 
 struct EZGridData
@@ -54,6 +55,7 @@ private:
   std::unique_ptr<BilateralFilterFuture> m_bilateral_filter_future;
   std::unique_ptr<CannyFuture> m_canny_bilateral_future, m_canny_filtered_future;
   std::unique_ptr<MorphGridFuture> m_morph_grid_future;
+  std::unique_ptr<VoronoiTessellation> m_voronoi_tessellation;
 
   std::string m_window_name;
   std::string m_gui_name;
