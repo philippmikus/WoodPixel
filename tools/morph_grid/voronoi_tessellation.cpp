@@ -24,14 +24,14 @@ Point2f intersection(Point2f clip1, Point2f clip2, Point2f a, Point2f b)
 
 void VoronoiTessellation::clip_facets()
 {
-	Point2f bbox[] = { {0,0}, {(float)m_width,0}, {(float)m_width,(float)m_height}, {0,(float)m_height} };
+	Point2f bbox[] = { {0,0}, {(float)m_width-5,0}, {(float)m_width-5,(float)m_height-5}, {0,(float)m_height-5} };
 	int new_facet_size = 0;
 
 	for (int i = 0; i < facets.size(); i++)
 	{
 		// Sutherland - Hodgman
-		std::vector<Point2f> input_facet(32);
-		std::vector<Point2f> new_facet(32);
+		vector<Point2f> input_facet(32);
+		vector<Point2f> new_facet(32);
 
 		for (int k = 0; k < facets[i].size(); k++) {
 			new_facet[k] = facets[i][k];
@@ -89,9 +89,9 @@ void VoronoiTessellation::clip_facets()
 
 }
 
-std::vector<Point2f> VoronoiTessellation::poisson_disk_sampling(int iterations)
+vector<Point2f> VoronoiTessellation::poisson_disk_sampling(int iterations)
 {
-	std::vector<Point2f> seeds;
+	vector<Point2f> seeds;
 
 	for (size_t i = 0; i < m_seed_count; i++)
 	{
@@ -100,6 +100,8 @@ std::vector<Point2f> VoronoiTessellation::poisson_disk_sampling(int iterations)
 
 		seeds.push_back(Point2f(x,y));
 	}
+
+	//imslic(seeds);
 
 	for (size_t i = 0; i < iterations; i++)
 	{
@@ -111,25 +113,25 @@ std::vector<Point2f> VoronoiTessellation::poisson_disk_sampling(int iterations)
 	return seeds;
 }
 
-void VoronoiTessellation::voronoi_tiles(std::vector<Point2f> seeds)
+void VoronoiTessellation::voronoi_tiles(vector<Point2f> seeds)
 {
 	Rect rect(0, 0, m_width, m_height);
 	Subdiv2D subdiv(rect);
-	std::vector<int> indices;
+	vector<int> indices;
 
 	for (int i = 0; i < seeds.size(); i++)
 	{
 		subdiv.insert(seeds[i]);
 	}
 
-	subdiv.getVoronoiFacetList(std::vector<int>(), facets, centers);
+	subdiv.getVoronoiFacetList(vector<int>(), facets, centers);
 }
 
-std::vector<Point2f> VoronoiTessellation::lloyds_relaxation()
+vector<Point2f> VoronoiTessellation::lloyds_relaxation()
 {
-	std::vector<Point2f> new_seeds;
-	std::vector<Point2f> vertices;
-	std::vector<Point2f> vectors;
+	vector<Point2f> new_seeds;
+	vector<Point2f> vertices;
+	vector<Point2f> vectors;
 
 	for (size_t i = 0; i < facets.size(); i++) 
 	{
@@ -159,3 +161,58 @@ std::vector<Point2f> VoronoiTessellation::lloyds_relaxation()
 
 	return new_seeds;
 }
+
+vector<vector<Point2f>> VoronoiTessellation::get_facets()
+{
+	return facets;
+}
+
+DataGrid<unsigned char> VoronoiTessellation::compute_grid()
+{
+	DataGrid<unsigned char> grid;
+	vector<Point2f> points;
+
+	for (int i = 0; i < facets.size(); i++) {
+		for (int j = 0; j < facets[i].size(); j++) {
+			points.push_back(facets[i][j]);
+		}
+	}
+
+	for (int i = 0; i < points.size(); i++) {
+		for (int j = 0; j < points.size(); j++) {
+			if (i != j && points[i] == points[j]) {
+				points.erase(points.begin() + j);
+				j--;
+			}
+		}
+	}
+
+	int size = sqrt(points.size());
+	grid.resize(size, size);
+
+	cv::Mat X = grid.to_mat<float>();
+
+	for (int i = 0; i < size; i++) {
+		for (int j = 0; j < size; j++) {
+			grid(i, j) = points[i * size + j];
+		}
+	}
+	m_grid = grid;
+	return grid;
+}
+
+vector<PatchRegion> VoronoiTessellation::compute_patches()
+{
+	vector<PatchRegion> patches;
+	
+	for (int i = 0; i < facets.size(); i++) {
+		vector<BezierCurve> lines;
+		for (int j = 0; j < facets[i].size(); j++) {
+			lines.emplace_back(BezierCurve(facets[i][j], facets[i][(j + 1) % facets[i].size()], 1));
+		}
+		patches.emplace_back(PatchRegion(0, {0,0}, lines, vector<BezierCurve>(), vector<BezierCurve>(), std::vector<BezierCurve>()));
+	}
+	
+	return patches;
+}
+

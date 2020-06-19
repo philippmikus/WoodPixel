@@ -163,9 +163,15 @@ public:
     m_update = true;
   }
 
-  void set_poisson_samples(std::vector<cv::Point2f> samples) 
+  void set_poisson_samples(std::vector<cv::Point2f> samples, std::vector<std::vector<cv::Point2f>> facets)
   {
       m_poisson_samples = samples;
+      m_facets = facets;
+  }
+
+  void set_output(DataGrid<unsigned char> grid, std::vector<PatchRegion> patches) {
+      m_grid = grid;
+      m_patches = patches;
   }
 
   void select_grid_point(int p_x, int p_y);
@@ -221,6 +227,7 @@ private:
   std::string m_message;
 
   std::vector<cv::Point2f> m_poisson_samples;
+  std::vector<std::vector<cv::Point2f>> m_facets;
 
   std::vector<PatchRegion> m_patches;
   std::vector<BezierCurve> m_curves_fitted;

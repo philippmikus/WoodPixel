@@ -321,6 +321,12 @@ cv::Mat MorphGridFuture::draw() const
       cv::circle(image_out, m_poisson_samples[i], 3, cv::Scalar(255, 0, 0), -1);
   }
 
+  for (int i = 0; i < m_facets.size(); i++) {
+      for (int j = 0; j < m_facets[i].size(); j++) {
+          cv::circle(image_out, m_facets[i][j], 3, cv::Scalar(0, 255, 0), -1);
+      }
+  }
+
   if (m_output_edge == OutputEdge::PATCHES)
   {
     cv::Mat mask = cv::Mat::zeros(image_out.size(), CV_8UC1);
