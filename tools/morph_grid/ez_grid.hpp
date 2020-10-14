@@ -34,32 +34,34 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 struct EZGridData
 {
-  Grid morphed_grid;
-  std::vector<PatchRegion> patches;
+    Grid morphed_grid;
+    std::vector<PatchRegion> patches;
 };
 
 class EZGrid : public Serializable
 {
 public:
-  EZGrid(cv::Mat image, cv::Mat image_filtered, int grid_size, const boost::filesystem::path& path_out);
+    EZGrid(cv::Mat image, cv::Mat image_filtered, int grid_size, const boost::filesystem::path& path_out);
 
-  void run();
-  void load_partial_state(const boost::filesystem::path& path);
-  void load_full_state(const boost::filesystem::path& path);
-  void save();
+    void run();
+    void load_partial_state(const boost::filesystem::path& path);
+    void load_full_state(const boost::filesystem::path& path);
+    void save();
 
-  virtual void load(const boost::filesystem::path& base_path, const boost::property_tree::ptree& tree) override;
-  virtual boost::property_tree::ptree save(const boost::filesystem::path& base_path, const boost::filesystem::path& path) const override;
+    virtual void load(const boost::filesystem::path& base_path, const boost::property_tree::ptree& tree) override;
+    virtual boost::property_tree::ptree save(const boost::filesystem::path& base_path, const boost::filesystem::path& path) const override;
 
 private:
-  std::unique_ptr<BilateralFilterFuture> m_bilateral_filter_future;
-  std::unique_ptr<CannyFuture> m_canny_bilateral_future, m_canny_filtered_future;
-  std::unique_ptr<MorphGridFuture> m_morph_grid_future;
-  std::unique_ptr<VoronoiTessellation> m_voronoi_tessellation;
+    std::unique_ptr<BilateralFilterFuture> m_bilateral_filter_future;
+    std::unique_ptr<CannyFuture> m_canny_bilateral_future, m_canny_filtered_future;
+    std::unique_ptr<MorphGridFuture> m_morph_grid_future;
+    std::unique_ptr<VoronoiTessellation> m_voronoi_tessellation;
 
-  std::string m_window_name;
-  std::string m_gui_name;
-  boost::filesystem::path m_path_out;
+    std::string m_window_name;
+    std::string m_gui_name;
+    boost::filesystem::path m_path_out;
+
+    bool SUPERPIXELS;
 };
 
 #endif /* EZ_GRID_HPP_ */

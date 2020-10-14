@@ -1053,11 +1053,17 @@ double BezierCurve::min_dist_approx(const cv::Point2d& p) const
 */
 static cv::Vec2d compute_left_tangent(const std::vector<cv::Point2d>& points, int end)
 {
+    if (points.size() >= 5) {
+        return cv::normalize(cv::Vec2d(points[end + 3] - points[end]));
+    }
   return cv::normalize(cv::Vec2d(points[end+1] - points[end]));
 }
 
 static cv::Vec2d compute_right_tangent(const std::vector<cv::Point2d>& points, int end)
 {
+    if (points.size() >= 5) {
+        return cv::normalize(cv::Vec2d(points[end - 3] - points[end]));
+    }
   return cv::normalize(cv::Vec2d(points[end-1] - points[end]));
 }
 
@@ -1294,7 +1300,7 @@ BezierCurve fit_cubic(const std::vector<cv::Point2d>& points, int first, int las
   curve = generate_bezier(points, first, last, u, t_hat_1, t_hat_2);
   double error = compute_max_error(points, first, last, curve, u);
 
-  const int max_iterations = 8;
+  const int max_iterations = 15;
   for (int i = 0; i < max_iterations; ++i)
   {
     const std::vector<double> u_prime = reparameterize(points, first, last, u, curve);
@@ -1323,7 +1329,7 @@ BezierCurve BezierCurve::fit_cubic(std::vector<cv::Point2d> points)
 {
   const int num_points = static_cast<int>(points.size());
 
-  sort_pca(points);
+  //sort_pca(points);
 
   cv::Vec2d t_hat_1 = compute_left_tangent(points, 0);
   cv::Vec2d t_hat_2 = compute_right_tangent(points, num_points-1);

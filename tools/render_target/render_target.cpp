@@ -113,10 +113,10 @@ int main(int argc, char* argv[])
 
     pt::ptree root;
     pt::read_json(path_in.string(), root);
-
+    
     std::vector<Patch> patches = Serializable::deserialize_vec<Patch>(root, "patches", path_in.parent_path());
     std::vector<Texture> textures = Serializable::deserialize_vec<Texture>(root, "textures_source", path_in.parent_path());
-
+    
     std::vector<Texture> textures_fullres;
     for (const Texture& t : textures)
     {
@@ -124,8 +124,11 @@ int main(int argc, char* argv[])
     }
 
     cv::Rect bbox = Patch::bounding_box(patches, scale);
+    bbox.width += 10;
+    bbox.height += 10;
     cv::Mat image(bbox.size(), CV_8UC3);
     cv::Mat edge_mask = cv::Mat::zeros(bbox.size(), CV_8UC1);
+
     for (const Patch& p : patches)
     {
       p.draw(image, scale, textures_fullres[p.source_index], textures[p.source_index].scale);
@@ -135,9 +138,10 @@ int main(int argc, char* argv[])
     cv::imwrite((path_out / "image.png").string(), image);
 
     const cv::Vec3b dark_brown(14, 29, 43);
-    edge_mask.convertTo(edge_mask, CV_32FC1, 1.0/255.0);
-    cv::GaussianBlur(edge_mask, edge_mask, cv::Size(5, 5), 0.0);
 
+    edge_mask.convertTo(edge_mask, CV_32FC1, 1.0 / 255.0);
+    cv::GaussianBlur(edge_mask, edge_mask, cv::Size(5, 5), 0.0);
+    
     for (int y = 0; y < image.rows; ++y)
     {
       cv::Vec3b* ptr_image = reinterpret_cast<cv::Vec3b*>(image.ptr(y));
@@ -147,7 +151,6 @@ int main(int argc, char* argv[])
         ptr_image[x] = ptr_mask[x] * dark_brown + (1.0f - ptr_mask[x]) * ptr_image[x];
       }
     }
-
     cv::imwrite((path_out / "image_boundary.png").string(), image);
   }
   catch (std::exception& e)
