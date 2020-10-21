@@ -10,14 +10,13 @@
 
 using namespace cv;
 
-typedef pair<int, float> iPair;
-
 /*
-Graph implementation from https://www.geeksforgeeks.org/dijkstras-shortest-path-algorithm-using-priority_queue-stl/
+Graph implementation see https://www.geeksforgeeks.org/dijkstras-shortest-path-algorithm-using-priority_queue-stl/
 */
 Graph::Graph(int V)
 {
 	this->V = V;
+	this->A = 0;
 	adj.resize(V);
 }
 
@@ -25,21 +24,27 @@ void Graph::add_edge(int u, int v, float w)
 {
 	adj[u].push_back(make_pair(v, w));
 	adj[v].push_back(make_pair(u, w));
+	A++;
 }
 
 vector<float> Graph::shortest_path(int src)
 {
-	priority_queue< iPair, vector <iPair>, greater<iPair> > pq;
+	queue< label > q1;
+	queue< label > q2;
 
 	vector<float> dist(V, INF);
 
-	pq.push(make_pair(0, src));
-	dist[src] = 0;
+	q1.push(make_pair(0.f, src));
+	dist[src] = 0.f;
+	int i = 0;
+	float threshold = 0.f;
+	float last_avg = 0.f;
 
-	while (!pq.empty())
+	iter:
+	while (!q1.empty())
 	{
-		int u = pq.top().second;
-		pq.pop();
+		int u = q1.front().second;
+		q1.pop();
 
 		list<pair<int, float>>::iterator i;
 		for (i = adj[u].begin(); i != adj[u].end(); ++i)
@@ -50,12 +55,67 @@ vector<float> Graph::shortest_path(int src)
 			if (dist[v] > dist[u] + weight)
 			{
 				dist[v] = dist[u] + weight;
-				pq.push(make_pair(dist[v], v));
+				if (dist[v] <= threshold)
+					q1.push(make_pair(dist[v], v));
+				else
+					q2.push(make_pair(dist[v], v));
 			}
 		}
 	}
+	if (!q2.empty()) {
+		threshold = calc_threshold(&q2, threshold, last_avg, i);
+		last_avg = repartition(&q1, &q2, threshold);
+		i++;
+		goto iter;
+	}
 
 	return dist;
+}
+
+float Graph::calc_threshold(queue<label>* q2, float last_threshold, float last_avg, int i)
+{
+	float avg = 0;
+	float min = INF;
+	float dense;
+
+	queue<label> temp;
+	if (i <= 1) {
+		while (!q2->empty()) {
+			if (q2->front().first < min) min = q2->front().first;
+			avg += q2->front().first;
+			temp.push(q2->front());
+			q2->pop();
+		}
+		avg /= temp.size();
+		*q2 = temp;
+	}
+	else if (i > 1) {
+		min = last_threshold;
+		avg = last_avg;
+	}
+
+	dense = std::min(35, (int) A / (int) V);
+	float threshold = avg - (avg - min) * (0.03 * dense - 0.15);
+
+	return threshold;
+}
+
+float Graph::repartition(queue<label>* q1, queue<label>* q2, float threshold)
+{
+	queue<label> tempq2;
+	float avg = 0;
+	int size = q2->size();
+	while (!q2->empty()) {
+		if (q2->front().first <= threshold) q1->push(q2->front());
+		else tempq2.push(q2->front());
+		avg += q2->front().first;
+
+		q2->pop();
+	}
+	avg /= (float)size;
+	*q2 = tempq2;
+
+	return avg;
 }
 
 bool is_left(Point2f p, Point2f a, Point2f b)
@@ -138,7 +198,6 @@ void VoronoiTessellation::clip_facets()
 			facets[i][j] = new_facet[j];
 		}
 	}
-
 }
 
 void VoronoiTessellation::voronoi_tiles(vector<Point2f> seeds)
@@ -279,7 +338,7 @@ vector<PatchRegion> VoronoiTessellation::compute_patches()
 		for (int j = 0; j < facets[i].size(); j++) {
 			lines.emplace_back(BezierCurve(facets[i][j], facets[i][(j + 1) % facets[i].size()], 1));
 		}
-		patches.emplace_back(PatchRegion(0, { 0,0 }, lines, vector<BezierCurve>(), vector<BezierCurve>(), std::vector<BezierCurve>()));
+		patches.emplace_back(PatchRegion(0, { 0,0 }, lines, vector<BezierCurve>(), vector<BezierCurve>(), vector<BezierCurve>()));
 	}
 
 	return patches;
@@ -375,10 +434,10 @@ void VoronoiTessellation::init_seeds(vector<Point2f>* seeds)
 	}
 }
 
-std::vector<Point2f> VoronoiTessellation::imslic(std::vector<Point2f> seeds)
+vector<Point2f> VoronoiTessellation::imslic(vector<Point2f> seeds)
 {
 	cvtColor(m_image, m_image, COLOR_BGR2Lab);
-	pixels.resize(m_height, std::vector<img_pixel_data>(m_width, { -1, FLT_MAX, 0 }));
+	pixels.resize(m_height, vector<img_pixel_data>(m_width, { -1, FLT_MAX, 0 }));
 
 	// compute stretch mapped unit square area for each pixel
 	for (int row = 1; row < m_height - 1; row++) {
@@ -412,7 +471,7 @@ std::vector<Point2f> VoronoiTessellation::imslic(std::vector<Point2f> seeds)
 			}
 		}
 
-		std::vector<float> scaling_factors(seeds.size(), 1.f);
+		vector<float> scaling_factors(seeds.size(), 1.f);
 
 		#pragma omp parallel for
 		for (int i = 0; i < seeds.size(); i++) {
@@ -712,7 +771,7 @@ vector<PatchRegion> VoronoiTessellation::compute_imslic_patches()
 		for (int col = 5; col <= m_width-7; col++) {
 			vector<int> neighbors = get_neighbors(row, col);
 
-			if (neighbors.size() > 2) {	//ecke
+			if (neighbors.size() > 2) {	// corner
 				if (!actual_corner(row, col)) continue;
 				for (int i = 0; i < neighbors.size(); i++) {
 					for (int j = 0; j < neighbors.size(); j++) {
@@ -739,7 +798,7 @@ vector<PatchRegion> VoronoiTessellation::compute_imslic_patches()
 					}
 				}
 			}
-			else if (neighbors.size() == 2) {	// kante
+			else if (neighbors.size() == 2) {	// border
 
 				// 2. patch
 				if (neighbors[1] < 0) continue;
@@ -841,8 +900,10 @@ vector<PatchRegion> VoronoiTessellation::compute_imslic_patches()
 			curves.emplace_back(BezierCurve::fit_cubic(temp3));
 		}
 		if (!edge_points.empty())
-			if(!curves.empty())
-				patches.emplace_back(PatchRegion(0, { 0,0 }, curves, vector<BezierCurve>(), vector<BezierCurve>(), std::vector<BezierCurve>()));
+			if (!curves.empty()) {
+				curves = sort_curves(curves);
+				patches.emplace_back(PatchRegion(0, { 0,0 }, curves, vector<BezierCurve>(), vector<BezierCurve>(), vector<BezierCurve>()));
+			}
 	}
 
 
@@ -978,8 +1039,8 @@ vector<int> VoronoiTessellation::getAdj(int v, vector<Point2d> points) {
 }
 
 void VoronoiTessellation::mode_filter() {
-	std::vector<std::vector<img_pixel_data>> new_pixels;
-	new_pixels.resize(m_height, std::vector<img_pixel_data>(m_width, { -1, 999999, 0 }));
+	vector<vector<img_pixel_data>> new_pixels;
+	new_pixels.resize(m_height, vector<img_pixel_data>(m_width, { -1, 999999, 0 }));
 
 	for (int row = 1; row < pixels.size() - 1; row++) {
 		for (int col = 1; col < pixels[0].size() - 1; col++) {
@@ -1035,4 +1096,37 @@ pair<Point2d, Point2d> VoronoiTessellation::furthest_distance(vector<Point2d> po
 	}
 
 	return make_pair(points[ind1], points[ind2]);
+}
+
+vector<BezierCurve> VoronoiTessellation::sort_curves(vector<BezierCurve> curves)
+{
+	vector<pair<Point2d, Point2d>> control_points(curves.size());
+
+	for (int i = 0; i < curves.size(); i++) {
+		int n = curves[i].num_control_points();
+		control_points[i].first = curves[i].control_point(0);
+		control_points[i].second = curves[i].control_point(n - 1);
+	}
+
+	for (int i = 0; i < curves.size(); i++) {
+		Point2d curr = control_points[i].second;
+
+		for (int j = 0; j < curves.size(); j++) {
+			if (i == j) continue;
+			if (norm(control_points[j].first - curr) <= 1.f) {
+				iter_swap(control_points.begin() + (i + 1) % curves.size(), control_points.begin() + j);
+				iter_swap(curves.begin() + (i + 1) % curves.size(), curves.begin() + j);
+			}
+			else if (norm(control_points[j].second - curr) <= 1.f) {
+				Point2d temp = control_points[j].first;
+				control_points[j].first = control_points[j].second;
+				control_points[j].second = temp;
+				curves[j] = curves[j].reversed();
+				iter_swap(control_points.begin() + (i + 1) % curves.size(), control_points.begin() + j);
+				iter_swap(curves.begin() + (i + 1) % curves.size(), curves.begin() + j);
+			}
+		}
+	}
+
+	return curves;
 }

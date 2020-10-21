@@ -28,15 +28,28 @@ struct img_pixel_data {
 	float area;
 };
 
+typedef pair<float, int> label;
+
 class Graph
 {
+	int A;
 	int V;
 	vector<list<pair<int, float>>> adj;
 
 public:
 	Graph(int V);
 	void add_edge(int u, int v, float w);
+
+	/**
+	* Find shortest path using the Threshold algorithm
+	*
+	* @param s Index of starting node
+	* @returns vector containing the shortest distances to all nodes in the graph
+	*/
 	vector<float> shortest_path(int s);
+
+	float calc_threshold(queue<label>* q2, float last_threshold, float last_avg, int i);
+	float repartition(queue<label>* q1, queue<label>* q2, float threshold);
 };
 
 class VoronoiTessellation {
@@ -52,7 +65,7 @@ public:
 	 * Start the segmentation algorithm
 	 *
 	 * @param iterations Number of iterations
-	 * @superpixles Uses IMSLIC if true, and CVT if false
+	 * @param superpixles Uses IMSLIC if true, and CVT if false
 	 * @returns positions of seeds
 	 */
 	vector<Point2f> start(int iterations, bool superpixels);
@@ -247,6 +260,8 @@ public:
 	 * Get the label matrix
 	 */
 	vector<vector<int>> get_pixels();
+
+	vector<BezierCurve> sort_curves(vector<BezierCurve> curves);
 
 private:
 	cv::Mat m_image;
