@@ -999,7 +999,7 @@ pair<Point2d, Point2d> VoronoiTessellation::find_corners(vector<Point2d> points)
 		sumy += components[0][i].y;
 	}
 
-	first = {sumx / components[0].size(), sumy / components[0].size()};
+	first = {floor(sumx / components[0].size()), floor(sumy / components[0].size())};
 
 	sumx = 0;
 	sumy = 0;
@@ -1008,7 +1008,7 @@ pair<Point2d, Point2d> VoronoiTessellation::find_corners(vector<Point2d> points)
 		sumy += components[1][i].y;
 	}
 
-	second = { sumx / components[1].size(), sumy / components[1].size() };
+	second = {floor(sumx / components[1].size()), floor(sumy / components[1].size()) };
 
 	return make_pair(first, second);
 }
