@@ -1,3 +1,12 @@
+/*
+"Intrinsic Manifold SLIC: A Simple and Efficient Method for Computing
+Content-Sensitive Superpixels"
+Yong-Jin Liu, Cheng-Chi Yu, Min-Jing Yu, Ying He,
+IEEE Transactions on Pattern Analysis and Machine Intelligence,
+March 2017, Issue 99.
+*/
+
+
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -413,25 +422,35 @@ float VoronoiTessellation::phi_area(int row, int col) {
 	return total_area;
 }
 
-void VoronoiTessellation::init_seeds(vector<Point2f>* seeds)
+vector<Point2f> VoronoiTessellation::init_seeds(vector<Point2f> seeds)
 {
+	vector<Point2f> ret(seeds.size());
 	float cum_area = 0;
 	vector<float> A(m_height * m_width);
-	for (int row = 1; row < m_height-1; row++) {
-		for (int col = 1; col < m_width-1; col++) {
+	for (int row = 0; row < m_height; row++) {
+		for (int col = 0; col < m_width; col++) {
 			cum_area += pixels[row][col].area;
 			A[row * m_width + col] = cum_area;
 		}
 	}
 
-	for (int i = 0; i < seeds->size(); i++) {
-		float sample = static_cast <float> (rand()) / (static_cast <float> (RAND_MAX / A[m_height * m_width - 1]));
-
-		for (int j = 1; j < A.size(); j++) {
-			if (A[j - 1] < sample && sample <= A[j])
-				seeds->at(i) = Point2f((float)(j % m_width), (float)(j / m_width));
+	for (int i = 0; i < A.size(); i++) {
+		if (A[i] == 0.f) {
+			A.erase(A.begin() + i);
+			i--;
 		}
 	}
+
+	for (int i = 0; i < seeds.size(); i++) {
+		float sample = static_cast <float> (rand()) / (static_cast <float> (RAND_MAX / cum_area));
+
+		for (int j = 1; j < A.size(); j++) {
+			if (A[j - 1] < sample && sample <= A[j] && A[j - 1] != 0 && A[j] != 0)
+				ret[i] = Point2f((float)(j % m_width), (float)(j / m_width));
+		}
+	}
+
+	return ret;
 }
 
 vector<Point2f> VoronoiTessellation::imslic(vector<Point2f> seeds)
@@ -446,7 +465,7 @@ vector<Point2f> VoronoiTessellation::imslic(vector<Point2f> seeds)
 		}
 	}
 
-	init_seeds(&seeds);
+	seeds = init_seeds(seeds);
 
 	float local_search_range = 0;
 	for (int i = 0; i < pixels.size(); i++) {
@@ -478,9 +497,9 @@ vector<Point2f> VoronoiTessellation::imslic(vector<Point2f> seeds)
 			float region_area = 0;
 			for (int u = -S; u < S; u++) {
 				for (int v = -S; v < S; v++) {
-					if (seeds[i].x + u > 0 && seeds[i].x + u < m_height-1
-						&& seeds[i].y + v > 0 && seeds[i].y + v < m_width-1)
-						region_area += pixels[seeds[i].x + u][seeds[i].y + v].area;
+					if (seeds[i].y + u > 0 && seeds[i].y + u < m_height - 1
+						&& seeds[i].x + v > 0 && seeds[i].x + v < m_width - 1)
+						region_area += pixels[seeds[i].y + u][seeds[i].x + v].area;
 				}
 			}
 			if (region_area != 0)
@@ -496,18 +515,18 @@ vector<Point2f> VoronoiTessellation::imslic(vector<Point2f> seeds)
 			int x = (int)seeds[i].x;
 			int y = (int)seeds[i].y;
 
-			Graph subgraph = build_graph(x, y, size, false);
+			Graph subgraph = build_graph(y, x, size, false);
 
-			vector<float> geo_distances = subgraph.shortest_path(x * m_width + y);
+			vector<float> geo_distances = subgraph.shortest_path(y * m_width + x);
 
 			for (int u = -size; u < size; u++) {
 				for (int v = -size; v < size; v++) {
-					if (x + u > 0 && x + u < m_height-1
-						&& y + v > 0 && y + v < m_width-1)
-						if (geo_distances[(x + u) * m_width + (y + v)] < pixels[x + u][y + v].distance) {
+					if (y + u > 0 && y + u < m_height - 1
+						&& x + v > 0 && x + v < m_width - 1)
+						if (geo_distances[(y + u) * m_width + (x + v)] < pixels[y + u][x + v].distance) {
 							omp_set_lock(&writelock);
-							pixels[x + u][y + v].distance = geo_distances[(x + u) * m_width + (y + v)];
-							pixels[x + u][y + v].label = i;
+							pixels[y + u][x + v].distance = geo_distances[(y + u) * m_width + (x + v)];
+							pixels[y + u][x + v].label = i;
 							omp_unset_lock(&writelock);
 						}
 				}
@@ -535,9 +554,9 @@ vector<Point2f> VoronoiTessellation::imslic(vector<Point2f> seeds)
 
 			if (indices.size() <= 3) continue;
 
-			Graph subgraph = build_graph(x, y, size, true);
+			Graph subgraph = build_graph(y, x, size, true);
 
-			int pi = seeds[i].x * m_width + seeds[i].y;
+			int pi = seeds[i].y * m_width + seeds[i].x;
 			int pj = indices[rand() % indices.size()];
 			int pk = indices[rand() % indices.size()];
 
@@ -600,9 +619,9 @@ vector<Point2f> VoronoiTessellation::imslic(vector<Point2f> seeds)
 
 						Mat eigen_calc(2, 3, CV_32FC1, c);
 
-						Vec3f delta3_mean = { (delta3.at<float>(0,0) + delta3.at<float>(1,0) + delta3.at<float>(2,0)) / 3,
-							(delta3.at<float>(0,1) + delta3.at<float>(1,1) + delta3.at<float>(2,1)) / 3,
-							(delta3.at<float>(0,2) + delta3.at<float>(1,2) + delta3.at<float>(2,2)) / 3 };
+						Vec3f delta3_mean = { (delta3.at<float>(0,0) + delta3.at<float>(0,1) + delta3.at<float>(0,2)) / 3,
+							(delta3.at<float>(1,0) + delta3.at<float>(1,1) + delta3.at<float>(1,2)) / 3,
+							(delta3.at<float>(2,0) + delta3.at<float>(2,1) + delta3.at<float>(2,2)) / 3 };
 
 						Mat t = eigen_calc * Mat(deltak - delta3_mean) / 2;
 						float ta = t.at<float>(0, 0);
@@ -619,7 +638,7 @@ vector<Point2f> VoronoiTessellation::imslic(vector<Point2f> seeds)
 					sum_y += remaining[j].first.at<float>(1, 0);
 				}
 
-				Vec2f center_embed = { sum_x / sum_i_area, sum_y / sum_i_area };
+				Vec2f center_embed = { sum_x / remaining.size(), sum_y / remaining.size() };
 
 				float min_norm = FLT_MAX;
 				int min_index = -1;
@@ -632,7 +651,7 @@ vector<Point2f> VoronoiTessellation::imslic(vector<Point2f> seeds)
 				}
 				if (min_norm == FLT_MAX) continue;
 
-				Vec2f center = { (float)(min_index / m_width), (float)(min_index % m_width) };
+				Vec2f center = { (float)(min_index % m_width), (float)(min_index / m_width) };
 				seeds[i] = center;
 			}
 			else 
@@ -727,7 +746,7 @@ Graph VoronoiTessellation::build_graph(int s_row, int s_col, int size, bool chec
 							Vec3b b = m_image.at<Vec3b>(row + u, col + v);
 							Pixel m2 = { (float)row + u, (float)col + v, (float)b[0], (float)b[1], (float)b[2] };
 							stretch(&m2);
-							g.add_edge(row * m_width + col, (row + u) * m_width + col + v, euclidian_distance(&m1, &m2));
+							g.add_edge(row * m_width + col, (row + u) * m_width + col + v, slic_distance(&m1, &m2));
 						}
 					}
 				}
@@ -740,23 +759,45 @@ Graph VoronoiTessellation::build_graph(int s_row, int s_col, int size, bool chec
 
 vector<int> VoronoiTessellation::get_neighbors(int row, int col)
 {
-	vector<int> neighbors;
+	vector<int> neighbors_8;
+	vector<int> neighbors_4;
 
 	for (int i = -1; i <= 1; i++) {
 		for (int j = -1; j <= 1; j++) {
-			neighbors.push_back(pixels[row + i][col + j].label);
+			neighbors_8.push_back(pixels[row + i][col + j].label);
 
-			if (row + i == 4)			neighbors.push_back(-1);
-			if (row + i == m_height - 6)			neighbors.push_back(-2);
-			if (col + j == 4)			neighbors.push_back(-3);
-			if (col + j == m_width - 6)			neighbors.push_back(-4);
+			if(!(abs(i) == 1 && abs(j) == 1))
+				neighbors_4.push_back(pixels[row + i][col + j].label);
+
+			if (row + i == 4) {
+				neighbors_8.push_back(-1);
+				neighbors_4.push_back(-1);
+			}
+			if (row + i == m_height - 6) {
+				neighbors_8.push_back(-2);
+				neighbors_4.push_back(-2);
+			}
+			if (col + j == 4) {
+				neighbors_8.push_back(-3);
+				neighbors_4.push_back(-3);
+			}
+			if (col + j == m_width - 6) {
+				neighbors_8.push_back(-4);
+				neighbors_4.push_back(-4);
+			}
 		}
 	}
 
-	sort(neighbors.begin(), neighbors.end());
-	neighbors.erase(unique(neighbors.begin(), neighbors.end()), neighbors.end());
+	sort(neighbors_8.begin(), neighbors_8.end());
+	neighbors_8.erase(unique(neighbors_8.begin(), neighbors_8.end()), neighbors_8.end());
 
-	return neighbors;
+	sort(neighbors_4.begin(), neighbors_4.end());
+	neighbors_4.erase(unique(neighbors_4.begin(), neighbors_4.end()), neighbors_4.end());
+
+	if (neighbors_8.size() >= 3)
+		return neighbors_8;
+	else
+		return neighbors_4;
 }
 
 vector<PatchRegion> VoronoiTessellation::compute_imslic_patches()
@@ -901,7 +942,7 @@ vector<PatchRegion> VoronoiTessellation::compute_imslic_patches()
 		}
 		if (!edge_points.empty())
 			if (!curves.empty()) {
-				curves = sort_curves(curves);
+				//curves = sort_curves(curves);
 				patches.emplace_back(PatchRegion(0, { 0,0 }, curves, vector<BezierCurve>(), vector<BezierCurve>(), vector<BezierCurve>()));
 			}
 	}
@@ -946,7 +987,7 @@ vector<Point2d> VoronoiTessellation::sort_edge(Point2d vertex, vector<Point2d> p
 		for (int i = 0; i < points.size(); i++) {
 			float dist = norm(curr - points[i]);
 			
-			if (dist < 3.0f) {
+			if (dist < 2.0f) {
 				points.erase(points.begin() + i);
 			}
 		}
@@ -999,7 +1040,7 @@ pair<Point2d, Point2d> VoronoiTessellation::find_corners(vector<Point2d> points)
 		sumy += components[0][i].y;
 	}
 
-	first = {floor(sumx / components[0].size()), floor(sumy / components[0].size())};
+	first = {round(sumx / components[0].size()), round(sumy / components[0].size())};
 
 	sumx = 0;
 	sumy = 0;
@@ -1008,7 +1049,7 @@ pair<Point2d, Point2d> VoronoiTessellation::find_corners(vector<Point2d> points)
 		sumy += components[1][i].y;
 	}
 
-	second = {floor(sumx / components[1].size()), floor(sumy / components[1].size()) };
+	second = { round(sumx / components[1].size()), round(sumy / components[1].size()) };
 
 	return make_pair(first, second);
 }

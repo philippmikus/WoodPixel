@@ -43,7 +43,7 @@ void PatchRegion::init_curves(cv::Rect bounding_box)
     throw(std::invalid_argument("Top, left, and diag curves empty in PatchRegion::init_curves."));
   }
   */
-
+  
   if (!m_curves_top.empty())
   {
     m_tl = m_curves_top[0].eval(0.0);
@@ -61,7 +61,7 @@ void PatchRegion::init_curves(cv::Rect bounding_box)
     m_tl.x = -1;
     m_tl.y = -1;
   }
-
+  
   update_bounding_box(bounding_box);
 }
 
@@ -80,7 +80,7 @@ void PatchRegion::update_bounding_box(cv::Rect bounding_box)
     cv::findNonZero(m_mask, draw_points);
     return;
   }
-
+  
   std::vector<cv::Point> draw_points;
   for (auto iter = curves.begin(); iter != curves.end(); ++iter)
   {
@@ -93,7 +93,7 @@ void PatchRegion::update_bounding_box(cv::Rect bounding_box)
   m_bounding_box = bounding_box == cv::Rect() ? cv::boundingRect(draw_points) : bounding_box;
 
   m_mask = cv::Mat::zeros(m_bounding_box.size(), CV_8UC1);
-
+  
   for (const BezierCurve& c : curves)
   {
     (c - m_bounding_box.tl()).draw<unsigned char>(m_mask, 255);
@@ -519,6 +519,14 @@ void PatchRegion::scale(double scale)
   std::transform(m_curves_left.begin(), m_curves_left.end(), m_curves_left.begin(), std::bind(&BezierCurve::scaled, std::placeholders::_1, scale));
   std::transform(m_curves_right.begin(), m_curves_right.end(), m_curves_right.begin(), std::bind(&BezierCurve::scaled, std::placeholders::_1, scale));
   std::transform(m_curves_diag.begin(), m_curves_diag.end(), m_curves_diag.begin(), std::bind(&BezierCurve::scaled, std::placeholders::_1, scale));
+
+  for (int i = 0; i < m_curves_top.size(); i++) {
+      int n = m_curves_top[i].num_control_points();
+      cv::Point2d first = m_curves_top[i].control_point(0);
+      cv::Point2d last = m_curves_top[i].control_point(n-1);
+      m_curves_top[i].set_control_point(0, cv::Point2d(round(first.x), round(first.y)));
+      m_curves_top[i].set_control_point(n-1, cv::Point2d(round(last.x), round(last.y)));
+  }
 
   if (m_curves_top.empty() && m_curves_bot.empty() && m_curves_left.empty() && m_curves_right.empty() && m_curves_diag.empty())
   {

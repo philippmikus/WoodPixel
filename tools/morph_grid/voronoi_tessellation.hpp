@@ -1,3 +1,11 @@
+/*
+"Intrinsic Manifold SLIC: A Simple and Efficient Method for Computing
+Content-Sensitive Superpixels"
+Yong-Jin Liu, Cheng-Chi Yu, Min-Jing Yu, Ying He,
+IEEE Transactions on Pattern Analysis and Machine Intelligence,
+March 2017, Issue 99.
+*/
+
 #ifndef VORONOI_TESSELLATION_HPP_
 #define VORONOI_TESSELLATION_HPP_
 
@@ -161,7 +169,7 @@ public:
 	*
 	* @param seeds Pointer to seed array
 	*/
-	void init_seeds(vector<Point2f>* seeds);
+	vector<Point2f> init_seeds(vector<Point2f> seeds);
 
 	/**
 	 * Perform IMSLIC algorithm on the image
@@ -278,9 +286,9 @@ private:
 
 	// IMSLIC Params
 	const int ITER_MAX = 10;
-	const int SIZE_TRESHOLD = 20;
-	const float Ns = 1.0f;
-	const float Nc = 1.5f;
+	const int SIZE_TRESHOLD = 100;
+	const float Ns = 0.8f;
+	const float Nc = 1.0f;
 };
 
 #endif
