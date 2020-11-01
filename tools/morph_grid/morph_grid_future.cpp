@@ -336,7 +336,7 @@ cv::Mat MorphGridFuture::draw() const
         }
 
         for (int i = 0; i < m_poisson_samples.size(); i++) {
-            //cv::circle(image_out, cv::Point2f(m_poisson_samples[i].x, m_poisson_samples[i].y), 3, cv::Scalar(0, 0, 0), -1);
+            cv::circle(image_out, cv::Point2f(m_poisson_samples[i].x, m_poisson_samples[i].y), 3, cv::Scalar(0, 0, 0), -1);
         }
     }
     else {

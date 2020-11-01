@@ -44,8 +44,11 @@ class Graph
 	int V;
 	vector<list<pair<int, float>>> adj;
 
+	int m_width;
+	int m_height;
+
 public:
-	Graph(int V);
+	Graph(int width, int height);
 	void add_edge(int u, int v, float w);
 
 	/**
@@ -54,10 +57,10 @@ public:
 	* @param s Index of starting node
 	* @returns vector containing the shortest distances to all nodes in the graph
 	*/
-	vector<float> shortest_path(int s);
+	vector<float> shortest_path(int s, int size, bool check_labels, vector<vector<img_pixel_data>> pixels);
 
-	float calc_threshold(queue<label>* q2, float last_threshold, float last_avg, int i);
-	float repartition(queue<label>* q1, queue<label>* q2, float threshold);
+	float calc_threshold(queue<label>& q2, float last_threshold, float last_avg, int i);
+	float repartition(queue<label>& q1, queue<label>& q2, float threshold);
 };
 
 class VoronoiTessellation {
@@ -89,7 +92,7 @@ public:
 
 	/**
 	 * Compute voronoi-facets
-	 * 
+	 *
 	 * @param seeds Vector containing the seed points
 	 */
 	void voronoi_tiles(vector<Point2f> seeds);
@@ -110,7 +113,7 @@ public:
 
 	/**
 	* Computes the patch grid
-	* 
+	*
 	* @returns patch grid
 	*/
 	DataGrid<unsigned char> compute_grid();
@@ -127,10 +130,10 @@ public:
 
 	/**
 	 * Apply stretch mapping to a Pixel
-	 * 
+	 *
 	 * @param Pointer to pixel
 	 */
-	void stretch(Pixel* m);
+	void stretch(Pixel& m);
 
 	/**
 	 * Compute SCLIC distance: sqrt( (ds/Ns)^2 + (dc/Nc)^2 )
@@ -138,7 +141,7 @@ public:
 	 * @param m1 First Pixel
 	 * @param m2 Second Pixel
 	 */
-	float slic_distance(Pixel* m1, Pixel* m2);
+	float slic_distance(const Pixel& m1, const Pixel& m2);
 
 	/**
 	 * Compute euclidian distance between 2 Pixels
@@ -146,7 +149,7 @@ public:
 	 * @param m1 First Pixel
 	 * @param m2 Second Pixel
 	 */
-	float euclidian_distance(Pixel* m1, Pixel* m2);
+	float euclidian_distance(const Pixel& m1, const Pixel& m2);
 
 	/**
 	 * Compute angle between 2 vectors
@@ -154,7 +157,7 @@ public:
 	 * @param m1 First vector
 	 * @param m2 Second vector
 	 */
-	float angle(Pixel* m1, Pixel* m2);
+	float angle(const Pixel& m1, const Pixel& m2);
 
 	/**
 	* Compute area of stretch mapped unit square in given Position
@@ -200,7 +203,7 @@ public:
 	 * @param size Size of subgraph
 	 * @param check_label If true only pixels with the same label as the target position will be added to the graph
 	 */
-	Graph build_graph(int s_row, int s_col, int size, bool check_label);
+	void build_graph(Graph& g);
 
 	/**
 	 * Get all labels in an 8-connected neighborhood around given position
@@ -243,7 +246,7 @@ public:
 	/**
 	 * Helper function to find connected components
 	 */
-	void ccrecur(int v, vector<Point2d> points, bool visited[], vector<Point2d>* comp);
+	void ccrecur(int v, vector<Point2d> points, bool visited[], vector<Point2d>& comp);
 
 	/**
 	 * Helper function to find neighboring pixels for computing connected components
@@ -269,6 +272,9 @@ public:
 	 */
 	vector<vector<int>> get_pixels();
 
+	/**
+	 * Sort curves so that they form one continuous path around the patch
+	 */
 	vector<BezierCurve> sort_curves(vector<BezierCurve> curves);
 
 private:
@@ -286,8 +292,8 @@ private:
 
 	// IMSLIC Params
 	const int ITER_MAX = 10;
-	const int SIZE_TRESHOLD = 100;
-	const float Ns = 0.8f;
+	const int SIZE_TRESHOLD = 50;
+	const float Ns = 0.5f;
 	const float Nc = 1.0f;
 };
 

@@ -6,7 +6,6 @@ IEEE Transactions on Pattern Analysis and Machine Intelligence,
 March 2017, Issue 99.
 */
 
-
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -15,18 +14,19 @@ March 2017, Issue 99.
 #include <omp.h>
 #include <algorithm>
 
-# define INF 0x3f3f3f3f 
-
 using namespace cv;
 
 /*
 Graph implementation see https://www.geeksforgeeks.org/dijkstras-shortest-path-algorithm-using-priority_queue-stl/
 */
-Graph::Graph(int V)
+Graph::Graph(int width, int height)
 {
-	this->V = V;
+	this->V = width * height;
 	this->A = 0;
 	adj.resize(V);
+
+	m_width = width;
+	m_height = height;
 }
 
 void Graph::add_edge(int u, int v, float w)
@@ -36,12 +36,15 @@ void Graph::add_edge(int u, int v, float w)
 	A++;
 }
 
-vector<float> Graph::shortest_path(int src)
+vector<float> Graph::shortest_path(int src, int size, bool check_labels, vector<vector<img_pixel_data>> pixels)
 {
+	int seed_row = src / m_width;
+	int seed_col = src % m_width;
+
 	queue< label > q1;
 	queue< label > q2;
 
-	vector<float> dist(V, INF);
+	vector<float> dist(V, FLT_MAX);
 
 	q1.push(make_pair(0.f, src));
 	dist[src] = 0.f;
@@ -49,7 +52,7 @@ vector<float> Graph::shortest_path(int src)
 	float threshold = 0.f;
 	float last_avg = 0.f;
 
-	iter:
+iter:
 	while (!q1.empty())
 	{
 		int u = q1.front().second;
@@ -59,6 +62,15 @@ vector<float> Graph::shortest_path(int src)
 		for (i = adj[u].begin(); i != adj[u].end(); ++i)
 		{
 			int v = (*i).first;
+			int node_row = v / m_width;
+			int node_col = v % m_width;
+
+			if (node_row < seed_row - size || node_row > seed_row + size || node_col < seed_col - size || node_col > seed_col + size)
+				continue;
+
+			if (check_labels && pixels[node_row][node_col].label != pixels[seed_row][seed_col].label)
+				continue;
+
 			float weight = (*i).second;
 
 			if (dist[v] > dist[u] + weight)
@@ -72,8 +84,8 @@ vector<float> Graph::shortest_path(int src)
 		}
 	}
 	if (!q2.empty()) {
-		threshold = calc_threshold(&q2, threshold, last_avg, i);
-		last_avg = repartition(&q1, &q2, threshold);
+		threshold = calc_threshold(q2, threshold, last_avg, i);
+		last_avg = repartition(q1, q2, threshold);
 		i++;
 		goto iter;
 	}
@@ -81,48 +93,48 @@ vector<float> Graph::shortest_path(int src)
 	return dist;
 }
 
-float Graph::calc_threshold(queue<label>* q2, float last_threshold, float last_avg, int i)
+float Graph::calc_threshold(queue<label>& q2, float last_threshold, float last_avg, int i)
 {
 	float avg = 0;
-	float min = INF;
+	float min = FLT_MAX;
 	float dense;
 
 	queue<label> temp;
 	if (i <= 1) {
-		while (!q2->empty()) {
-			if (q2->front().first < min) min = q2->front().first;
-			avg += q2->front().first;
-			temp.push(q2->front());
-			q2->pop();
+		while (!q2.empty()) {
+			if (q2.front().first < min) min = q2.front().first;
+			avg += q2.front().first;
+			temp.push(q2.front());
+			q2.pop();
 		}
 		avg /= temp.size();
-		*q2 = temp;
+		q2 = temp;
 	}
 	else if (i > 1) {
 		min = last_threshold;
 		avg = last_avg;
 	}
 
-	dense = std::min(35, (int) A / (int) V);
+	dense = std::min(35, (int)A / (int)V);
 	float threshold = avg - (avg - min) * (0.03 * dense - 0.15);
 
 	return threshold;
 }
 
-float Graph::repartition(queue<label>* q1, queue<label>* q2, float threshold)
+float Graph::repartition(queue<label>& q1, queue<label>& q2, float threshold)
 {
 	queue<label> tempq2;
 	float avg = 0;
-	int size = q2->size();
-	while (!q2->empty()) {
-		if (q2->front().first <= threshold) q1->push(q2->front());
-		else tempq2.push(q2->front());
-		avg += q2->front().first;
+	int size = q2.size();
+	while (!q2.empty()) {
+		if (q2.front().first <= threshold) q1.push(q2.front());
+		else tempq2.push(q2.front());
+		avg += q2.front().first;
 
-		q2->pop();
+		q2.pop();
 	}
 	avg /= (float)size;
-	*q2 = tempq2;
+	q2 = tempq2;
 
 	return avg;
 }
@@ -353,44 +365,40 @@ vector<PatchRegion> VoronoiTessellation::compute_patches()
 	return patches;
 }
 
-void VoronoiTessellation::stretch(Pixel* m)
+void VoronoiTessellation::stretch(Pixel& m)
 {
 	float lambda1 = 1.f / Ns;
 	float lambda2 = 1.f / Nc;
-	
-	m->u *= lambda1;
-	m->v *= lambda1;
-	m->l *= lambda2;
-	m->a *= lambda2;
-	m->b *= lambda2;
+
+	m.u *= lambda1;
+	m.v *= lambda1;
+	m.l *= lambda2;
+	m.a *= lambda2;
+	m.b *= lambda2;
 }
 
-float VoronoiTessellation::slic_distance(Pixel* m1, Pixel* m2)
+float VoronoiTessellation::slic_distance(const Pixel& m1, const Pixel& m2)
 {
-	float ds = sqrt(pow(m1->u - m2->u, 2) + pow(m1->v - m2->v, 2));
-	float dc = sqrt(pow(m1->l - m2->l, 2) + pow(m1->a - m2->a, 2) + pow(m1->b - m2->b, 2));
+	float ds = sqrt(pow(m1.u - m2.u, 2) + pow(m1.v - m2.v, 2));
+	float dc = sqrt(pow(m1.l - m2.l, 2) + pow(m1.a - m2.a, 2) + pow(m1.b - m2.b, 2));
 
-	float D = sqrt(pow(ds / Ns, 2) + pow(dc / Nc, 2));
-
-	return D;
+	return (sqrt(pow(ds / Ns, 2) + pow(dc / Nc, 2)));
 }
 
-float VoronoiTessellation::euclidian_distance(Pixel* m1, Pixel* m2)
+float VoronoiTessellation::euclidian_distance(const Pixel& m1, const Pixel& m2)
 {
-	float ret = sqrt(pow(m2->u - m1->u, 2) + pow(m2->v - m1->v, 2) + pow(m2->l - m1->l, 2) + pow(m2->a - m1->a, 2) + pow(m2->b - m1->b, 2));
-	return ret;
+	return (sqrt(pow(m2.u - m1.u, 2) + pow(m2.v - m1.v, 2) + pow(m2.l - m1.l, 2) + pow(m2.a - m1.a, 2) + pow(m2.b - m1.b, 2)));
 }
 
-float VoronoiTessellation::angle(Pixel* m1, Pixel* m2)
+float VoronoiTessellation::angle(const Pixel& m1, const Pixel& m2)
 {
-	float dot = m1->u * m2->u + m1->v * m2->v + m1->l * m2->l + m1->a * m2->a + m1->b * m2->b;
-	float length1 = sqrt(pow(m1->u, 2) + pow(m1->v, 2) + pow(m1->l, 2) + pow(m1->a, 2) + pow(m1->b, 2));
-	float length2 = sqrt(pow(m2->u, 2) + pow(m2->v, 2) + pow(m2->l, 2) + pow(m2->a, 2) + pow(m2->b, 2));
+	float dot = m1.u * m2.u + m1.v * m2.v + m1.l * m2.l + m1.a * m2.a + m1.b * m2.b;
+	float length1 = sqrt(pow(m1.u, 2) + pow(m1.v, 2) + pow(m1.l, 2) + pow(m1.a, 2) + pow(m1.b, 2));
+	float length2 = sqrt(pow(m2.u, 2) + pow(m2.v, 2) + pow(m2.l, 2) + pow(m2.a, 2) + pow(m2.b, 2));
 
 	float cosangle = dot / (length1 * length2);
 
-	float ret = acos(cosangle);
-	return ret;
+	return acos(cosangle);
 }
 
 float VoronoiTessellation::phi_area(int row, int col) {
@@ -410,16 +418,15 @@ float VoronoiTessellation::phi_area(int row, int col) {
 	Pixel m2 = { row + 0.5f, col - 0.5f, (a2[0] + a3[0] + a5[0] + a6[0]) / 4.f, (a2[1] + a3[1] + a5[1] + a6[1]) / 4.f, (a2[2] + a3[2] + a5[2] + a6[2]) / 4.f };
 	Pixel m3 = { row + 0.5f, col + 0.5f, (a4[0] + a5[0] + a7[0] + a8[0]) / 4.f, (a4[1] + a5[1] + a7[1] + a8[1]) / 4.f, (a4[2] + a5[2] + a7[2] + a8[2]) / 4.f };
 	Pixel m4 = { row - 0.5f, col + 0.5f, (a5[0] + a6[0] + a8[0] + a9[0]) / 4.f, (a5[1] + a6[1] + a8[1] + a9[1]) / 4.f, (a5[2] + a6[2] + a8[2] + a9[2]) / 4.f };
-	stretch(&m1);
-	stretch(&m2);
-	stretch(&m3);
-	stretch(&m4);
+	stretch(m1);
+	stretch(m2);
+	stretch(m3);
+	stretch(m4);
 
-	float area1 = (1.f / 2.f) * slic_distance(&m2, &m1) * slic_distance(&m2, &m3) * sin(angle(&(m1 - m2), &(m3 - m2)));
-	float area2 = (1.f / 2.f) * slic_distance(&m4, &m3) * slic_distance(&m4, &m1) * sin(angle(&(m3 - m4), &(m1 - m3)));
-	float total_area = area1 + area2;
-	
-	return total_area;
+	float area1 = (1.f / 2.f) * slic_distance(m2, m1) * slic_distance(m2, m3) * sin(angle((m1 - m2), (m3 - m2)));
+	float area2 = (1.f / 2.f) * slic_distance(m4, m3) * slic_distance(m4, m1) * sin(angle((m3 - m4), (m1 - m3)));
+
+	return (area1 + area2);
 }
 
 vector<Point2f> VoronoiTessellation::init_seeds(vector<Point2f> seeds)
@@ -458,25 +465,23 @@ vector<Point2f> VoronoiTessellation::imslic(vector<Point2f> seeds)
 	cvtColor(m_image, m_image, COLOR_BGR2Lab);
 	pixels.resize(m_height, vector<img_pixel_data>(m_width, { -1, FLT_MAX, 0 }));
 
+	float N = m_width * m_height;
+	float S = (int) sqrt(N / seeds.size());
+
 	// compute stretch mapped unit square area for each pixel
+	float local_search_range = 0;
 	for (int row = 1; row < m_height - 1; row++) {
 		for (int col = 1; col < m_width - 1; col++) {
 			pixels[row][col].area = phi_area(row, col);
+			local_search_range += pixels[row][col].area;
 		}
 	}
+	local_search_range = 8 * local_search_range / seeds.size();
 
 	seeds = init_seeds(seeds);
 
-	float local_search_range = 0;
-	for (int i = 0; i < pixels.size(); i++) {
-		for (int j = 0; j < pixels[0].size(); j++) {
-			local_search_range += pixels[i][j].area;
-		}
-	}
-	local_search_range = 4 * local_search_range / seeds.size();
-
-	int S = (int)sqrt(m_width * m_height / seeds.size());
-
+	Graph pixel_graph(m_width, m_height);
+	build_graph(pixel_graph);
 	for (int iter = 0; iter < ITER_MAX; iter++)
 	{
 		printf("Iter: %d\n", iter);
@@ -511,13 +516,11 @@ vector<Point2f> VoronoiTessellation::imslic(vector<Point2f> seeds)
 
 		#pragma omp parallel for
 		for (int i = 0; i < seeds.size(); i++) {
-			int size = (int)2.0f * S * scaling_factors[i];
+			int size = (int) S * scaling_factors[i];
 			int x = (int)seeds[i].x;
 			int y = (int)seeds[i].y;
 
-			Graph subgraph = build_graph(y, x, size, false);
-
-			vector<float> geo_distances = subgraph.shortest_path(y * m_width + x);
+			vector<float> geo_distances = pixel_graph.shortest_path(y * m_width + x, size, false, pixels);
 
 			for (int u = -size; u < size; u++) {
 				for (int v = -size; v < size; v++) {
@@ -537,39 +540,37 @@ vector<Point2f> VoronoiTessellation::imslic(vector<Point2f> seeds)
 
 		#pragma omp parallel for
 		for (int i = 0; i < seeds.size(); i++) {
-			int size = (int)2.0f * S * scaling_factors[i];
+			int size = (int) S * scaling_factors[i];
 			int x = (int)seeds[i].x;
 			int y = (int)seeds[i].y;
 
-			float sum_i_area = 0;
 			vector<int> indices;
-			for (int row = 0; row < m_height; row++) {
-				for (int col = 0; col < m_width; col++) {
-					if (pixels[row][col].label == i) {
-						sum_i_area += pixels[row][col].area;
-						indices.push_back(row * m_width + col);
-					}
+			for (int u = -size; u < size; u++) {
+				for (int v = -size; v < size; v++) {
+					if (y + u > 0 && y + u < m_height - 1
+						&& x + v > 0 && x + v < m_width - 1)
+						if (pixels[y + u][x + v].label == i) {
+							indices.push_back((y + u) * m_width + x + v);
+						}
 				}
 			}
 
 			if (indices.size() <= 3) continue;
 
-			Graph subgraph = build_graph(y, x, size, true);
-
 			int pi = seeds[i].y * m_width + seeds[i].x;
 			int pj = indices[rand() % indices.size()];
 			int pk = indices[rand() % indices.size()];
 
-			vector<float> geo_pi = subgraph.shortest_path(pi);
-			vector<float> geo_pj = subgraph.shortest_path(pj);
-			vector<float> geo_pk = subgraph.shortest_path(pk);
+			vector<float> geo_pi = pixel_graph.shortest_path(pi, size, true, pixels);
+			vector<float> geo_pj = pixel_graph.shortest_path(pj, size, true, pixels);
+			vector<float> geo_pk = pixel_graph.shortest_path(pk, size, true, pixels);
 
 			while (!(geo_pi[pk] + geo_pj[pk]) > 1.2f * geo_pi[pj]) {
 				pj = indices[rand() % indices.size()];
 				pk = indices[rand() % indices.size()];
 
-				geo_pj = subgraph.shortest_path(pj);
-				geo_pk = subgraph.shortest_path(pk);
+				geo_pj = pixel_graph.shortest_path(pj, size, true, pixels);
+				geo_pk = pixel_graph.shortest_path(pk, size, true, pixels);
 			}
 
 			float a[3][3] = {
@@ -623,9 +624,7 @@ vector<Point2f> VoronoiTessellation::imslic(vector<Point2f> seeds)
 							(delta3.at<float>(1,0) + delta3.at<float>(1,1) + delta3.at<float>(1,2)) / 3,
 							(delta3.at<float>(2,0) + delta3.at<float>(2,1) + delta3.at<float>(2,2)) / 3 };
 
-						Mat t = eigen_calc * Mat(deltak - delta3_mean) / 2;
-						float ta = t.at<float>(0, 0);
-						float tc = t.at<float>(1, 0);
+						Mat t = -eigen_calc * Mat(deltak - delta3_mean) / 2;
 						remaining.push_back(make_pair(t, ind));
 					}
 				}
@@ -633,7 +632,6 @@ vector<Point2f> VoronoiTessellation::imslic(vector<Point2f> seeds)
 				float sum_x = 0;
 				float sum_y = 0;
 				for (int j = 0; j < remaining.size(); j++) {
-					float test = remaining[j].first.at<float>(0, 0);
 					sum_x += remaining[j].first.at<float>(0, 0);
 					sum_y += remaining[j].first.at<float>(1, 0);
 				}
@@ -654,7 +652,7 @@ vector<Point2f> VoronoiTessellation::imslic(vector<Point2f> seeds)
 				Vec2f center = { (float)(min_index % m_width), (float)(min_index / m_width) };
 				seeds[i] = center;
 			}
-			else 
+			else
 				continue;
 		}
 	}
@@ -674,8 +672,8 @@ void VoronoiTessellation::remove_small_patches()
 
 	for (int i = 0; i < m_seed_count; i++) {
 		if (patch_sizes[i] < SIZE_TRESHOLD) {
-			for (int row = 1; row < pixels.size()-1; row++) {
-				for (int col = 1; col < pixels[0].size()-1; col++) {
+			for (int row = 1; row < pixels.size() - 1; row++) {
+				for (int col = 1; col < pixels[0].size() - 1; col++) {
 					if (pixels[row][col].label == i) {
 						pixels[row][col].label = most_frequent_neighbor(row, col, i);
 					}
@@ -699,7 +697,7 @@ int VoronoiTessellation::most_frequent_neighbor(int row, int col, int l)
 
 	sort(neighbors.begin(), neighbors.end());
 	int max_count = 1, res = neighbors[0], curr_count = 1;
-	
+
 	for (int i = 1; i < neighbors.size(); i++) {
 		if (neighbors[i] == neighbors[i - 1])
 			curr_count++;
@@ -717,44 +715,32 @@ int VoronoiTessellation::most_frequent_neighbor(int row, int col, int l)
 		max_count = curr_count;
 		res = neighbors[neighbors.size() - 1];
 	}
-	
+
 	return res;
 }
 
-Graph VoronoiTessellation::build_graph(int s_row, int s_col, int size, bool check_label)
+void VoronoiTessellation::build_graph(Graph& g)
 {
-	int V = m_width * m_height;
-	Graph g(V);
-
-	for (int row = s_row - size; row <= s_row + size; row++) {
-		for (int col = s_col - size; col <= s_col + size; col++) {
-			if (row > 0 && row < m_height - 2 && col > 0 && col < m_width - 2) {
-
-				if (check_label)
-					if (pixels[row][col].label != pixels[s_row][s_col].label) continue;
-
-				Vec3b a = m_image.at<Vec3b>(row, col);
-				Pixel m1 = { (float)row, (float)col, (float)a[0], (float)a[1], (float)a[2] };
-				stretch(&m1);
-				for (int u = -1; u <= 1; u++) {
-					for (int v = -1; v <= 1; v++) {
-						if (!(u == 0 && v == 0)) {
-
-							if (check_label)
-								if (pixels[row+u][col+v].label != pixels[s_row][s_col].label) continue;
-
+	for (int row = 0; row < m_height; row++) {
+		for (int col = 0; col < m_width; col++) {
+			Vec3b a = m_image.at<Vec3b>(row, col);
+			Pixel m1 = { (float)row, (float)col, (float)a[0], (float)a[1], (float)a[2] };
+			stretch(m1);
+			for (int u = -1; u <= 1; u++) {
+				for (int v = -1; v <= 1; v++) {
+					if (!(u == 0 && v == 0)) {
+						if (row + u >= 0 && row + u < m_height
+							&& col + v >= 0 && col + v < m_width) {
 							Vec3b b = m_image.at<Vec3b>(row + u, col + v);
 							Pixel m2 = { (float)row + u, (float)col + v, (float)b[0], (float)b[1], (float)b[2] };
-							stretch(&m2);
-							g.add_edge(row * m_width + col, (row + u) * m_width + col + v, slic_distance(&m1, &m2));
+							stretch(m2);
+							g.add_edge(row * m_width + col, (row + u) * m_width + col + v, euclidian_distance(m1, m2));
 						}
 					}
 				}
 			}
 		}
 	}
-
-	return g;
 }
 
 vector<int> VoronoiTessellation::get_neighbors(int row, int col)
@@ -766,7 +752,7 @@ vector<int> VoronoiTessellation::get_neighbors(int row, int col)
 		for (int j = -1; j <= 1; j++) {
 			neighbors_8.push_back(pixels[row + i][col + j].label);
 
-			if(!(abs(i) == 1 && abs(j) == 1))
+			if (!(abs(i) == 1 && abs(j) == 1))
 				neighbors_4.push_back(pixels[row + i][col + j].label);
 
 			if (row + i == 4) {
@@ -805,11 +791,11 @@ vector<PatchRegion> VoronoiTessellation::compute_imslic_patches()
 	printf("patches start\n");
 	vector<PatchRegion> patches;
 
-	vector<vector<vector<pair<int, Point2d>>>> edge_points(m_seed_count);		// patches -> boundarys -> points (label, coord)
+	vector<vector<vector<pair<int, Point2d>>>> edge_points(m_seed_count);		// patches -> boundaries -> points (label, coords)
 	vector<vector<vector<pair<int, Point2d>>>> corner_points(m_seed_count);
 
-	for (int row = 5; row <= m_height-7; row++) {
-		for (int col = 5; col <= m_width-7; col++) {
+	for (int row = 5; row <= m_height - 7; row++) {
+		for (int col = 5; col <= m_width - 7; col++) {
 			vector<int> neighbors = get_neighbors(row, col);
 
 			if (neighbors.size() > 2) {	// corner
@@ -840,7 +826,6 @@ vector<PatchRegion> VoronoiTessellation::compute_imslic_patches()
 				}
 			}
 			else if (neighbors.size() == 2) {	// border
-
 				// 2. patch
 				if (neighbors[1] < 0) continue;
 				if (!edge_points[neighbors[1]].empty()) {
@@ -915,23 +900,23 @@ vector<PatchRegion> VoronoiTessellation::compute_imslic_patches()
 			for (int k = 0; k < edge_points[i][edge_ind].size(); k++) {
 				temp[k] = edge_points[i][edge_ind][k].second;
 			}
-			
+
 			if (corner_points[i][j].size() < 2) {
 				printf("fehler\n");
 				continue;
 			}
-			
+
 			vector<Point2d> temp2(corner_points[i][j].size());
 			for (int k = 0; k < corner_points[i][j].size(); k++) {
 				temp2[k] = corner_points[i][j][k].second;
 			}
-			
+
 			pair<Point2d, Point2d> corners = find_corners(temp2);
 
 			if (corners.first.x == -1.f) {
 				corners = furthest_distance(temp2);
 			}
-			
+
 			Point2d first = corners.first;
 			Point2d last = corners.second;
 
@@ -942,7 +927,7 @@ vector<PatchRegion> VoronoiTessellation::compute_imslic_patches()
 		}
 		if (!edge_points.empty())
 			if (!curves.empty()) {
-				//curves = sort_curves(curves);
+				curves = sort_curves(curves);
 				patches.emplace_back(PatchRegion(0, { 0,0 }, curves, vector<BezierCurve>(), vector<BezierCurve>(), vector<BezierCurve>()));
 			}
 	}
@@ -957,15 +942,15 @@ bool VoronoiTessellation::actual_corner(int row, int col)
 
 	if (row == 5 || row == m_height - 7 || col == 5 || col == m_width - 7)		return true;
 
-	vector<int> n = { 
+	vector<int> n = {
 		pixels[row - 1][col - 1].label,
-		pixels[row - 1][col    ].label,
+		pixels[row - 1][col].label,
 		pixels[row - 1][col + 1].label,
-		pixels[row    ][col + 1].label,
+		pixels[row][col + 1].label,
 		pixels[row + 1][col + 1].label,
-		pixels[row + 1][col    ].label,
+		pixels[row + 1][col].label,
 		pixels[row + 1][col - 1].label,
-		pixels[row    ][col - 1].label
+		pixels[row][col - 1].label
 	};
 
 	for (int i = 0; i < n.size(); i++) {
@@ -978,7 +963,7 @@ bool VoronoiTessellation::actual_corner(int row, int col)
 vector<Point2d> VoronoiTessellation::sort_edge(Point2d vertex, vector<Point2d> points) {
 	vector<Point2d> ret;
 	Point2d curr = vertex;
-	
+
 	int size = points.size() + 1;
 
 	while (points.size() > 0) {
@@ -986,13 +971,13 @@ vector<Point2d> VoronoiTessellation::sort_edge(Point2d vertex, vector<Point2d> p
 
 		for (int i = 0; i < points.size(); i++) {
 			float dist = norm(curr - points[i]);
-			
+
 			if (dist < 2.0f) {
 				points.erase(points.begin() + i);
 			}
 		}
-		
-		float min = 99999.f;
+
+		float min = FLT_MAX;
 		int min_ind = -1;
 		for (int i = 0; i < points.size(); i++) {
 			float dist = norm(curr - points[i]);
@@ -1016,19 +1001,19 @@ pair<Point2d, Point2d> VoronoiTessellation::find_corners(vector<Point2d> points)
 		visited[v] = false;
 
 	vector<vector<Point2d>> components;
-	vector<Point2d>* comp = new vector<Point2d>();
+	vector<Point2d> comp;
 
 	for (int i = 0; i < points.size(); i++) {
 		if (visited[i] == false) {
 			ccrecur(i, points, visited, comp);
-			components.push_back(*comp);
-			comp->clear();
+			components.push_back(comp);
+			comp.clear();
 		}
 	}
 
 	delete(visited);
 	if (components.size() != 2) {
-		return(make_pair(Point2d( -1,-1 ), Point2d( -1,-1 )));
+		return(make_pair(Point2d(-1, -1), Point2d(-1, -1)));
 	}
 
 	Point2d first;
@@ -1040,7 +1025,7 @@ pair<Point2d, Point2d> VoronoiTessellation::find_corners(vector<Point2d> points)
 		sumy += components[0][i].y;
 	}
 
-	first = {round(sumx / components[0].size()), round(sumy / components[0].size())};
+	first = { round(sumx / components[0].size()), round(sumy / components[0].size()) };
 
 	sumx = 0;
 	sumy = 0;
@@ -1054,10 +1039,10 @@ pair<Point2d, Point2d> VoronoiTessellation::find_corners(vector<Point2d> points)
 	return make_pair(first, second);
 }
 
-void VoronoiTessellation::ccrecur(int v, vector<Point2d> points, bool visited[], vector<Point2d>* comp) {
+void VoronoiTessellation::ccrecur(int v, vector<Point2d> points, bool visited[], vector<Point2d>& comp) {
 	if (visited[v] == true) return;
 	visited[v] = true;
-	comp->push_back(points[v]);
+	comp.push_back(points[v]);
 
 	vector<int> adj = getAdj(v, points);
 
@@ -1081,7 +1066,7 @@ vector<int> VoronoiTessellation::getAdj(int v, vector<Point2d> points) {
 
 void VoronoiTessellation::mode_filter() {
 	vector<vector<img_pixel_data>> new_pixels;
-	new_pixels.resize(m_height, vector<img_pixel_data>(m_width, { -1, 999999, 0 }));
+	new_pixels.resize(m_height, vector<img_pixel_data>(m_width, { -1, FLT_MAX, 0 }));
 
 	for (int row = 1; row < pixels.size() - 1; row++) {
 		for (int col = 1; col < pixels[0].size() - 1; col++) {
@@ -1114,7 +1099,7 @@ void VoronoiTessellation::mode_filter() {
 				res = neighbors[neighbors.size() - 1];
 			}
 
-			
+
 			new_pixels[row][col].label = res;
 		}
 	}
