@@ -72,13 +72,16 @@ int main(int argc, char* argv[])
   {*/
     po::options_description desc("Allowed options");
     desc.add_options()
-      ("help,h", "Show this help message")
-      ("image,i", po::value<fs::path>(), "Input image")
-      ("filtered,f", po::value<fs::path>(), "Filtered input image")
-      ("size,s", po::value<int>(), "Number of pixels per grid cell")
-      ("out,o", po::value<fs::path>(), "Output JSON file")
-      ("load_full_state", po::value<fs::path>(), "Load full state using json file")
-      ("load_partial_state", po::value<fs::path>(), "Load partial state using json file (edges, masks)");
+        ("help,h", "Show this help message")
+        ("image,i", po::value<fs::path>(), "Input image")
+        ("filtered,f", po::value<fs::path>(), "Filtered input image")
+        ("size,s", po::value<int>(), "Number of pixels per grid cell")
+        ("out,o", po::value<fs::path>(), "Output JSON file")
+        ("load_full_state", po::value<fs::path>(), "Load full state using json file")
+        ("patch_count", po::value<int>(), "Patch count")
+        ("max_iter", po::value<int>(), "max iterations")
+        ("threshold", po::value<int>(), "patch size threshold")
+        ("param,p", po::value<float>(), "IMSLIC parameter");
 
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc, po::command_line_style::unix_style), vm);
@@ -94,60 +97,125 @@ int main(int argc, char* argv[])
     cv::Mat image_filtered = load_image(vm, "filtered", cv::IMREAD_GRAYSCALE);
 
     fs::path path_partial_state;
-    if (vm.count("load_partial_state"))
-    {
-      path_partial_state = vm["load_partial_state"].as<fs::path>();
-
-      if (!fs::exists(path_partial_state) || !fs::is_regular_file(path_partial_state))
-      {
-        std::cerr << "Partial state JSON path does not exist or is no regular file." << std::endl
-          << desc << std::endl;
-        return -1;
-      }
-    }
 
     fs::path path_full_state;
-    if (vm.count("load_full_state"))
-    {
-      path_full_state = vm["load_full_state"].as<fs::path>();
-
-      if (!fs::exists(path_full_state) || !fs::is_regular_file(path_full_state))
-      {
-        std::cerr << "Full state JSON path does not exist or is no regular file." << std::endl
-          << desc << std::endl;
-        return -1;
-      }
-    }
 
     fs::path path_out, path_out_parent;
-    if (vm.count("out"))
-    {
-      path_out = vm["out"].as<fs::path>();
-      path_out_parent = path_out.parent_path();
-      if (fs::exists(path_out) && fs::is_directory(path_out))
-      {
-        std::cerr << "Output path exists but is a directory." << std::endl;
-        return -1;
-      }
-    }
-    else
-    {
-      std::cerr << "No output path specified." << std::endl
-        << desc << std::endl;
-    }
-
+    
     int grid_size;
-    if (vm.count("size"))
+
+    
+    int patch_count;
+    int max_iter = -1;
+    int threshold;
+    float param;
+    if (vm.count("max_iter"))
     {
-      grid_size = vm["size"].as<int>();
+        max_iter = vm["max_iter"].as<int>();
+
+        if (vm.count("patch_count"))
+        {
+            patch_count = vm["patch_count"].as<int>();
+        }
+        else
+        {
+            std::cerr << "No patch count specified." << std::endl;
+            return -1;
+        }
+
+        if (vm.count("threshold"))
+        {
+            threshold = vm["threshold"].as<int>();
+        }
+        else
+        {
+            std::cerr << "No threshold specified." << std::endl;
+            return -1;
+        }
+
+        if (vm.count("param"))
+        {
+            param = vm["param"].as<float>();
+        }
+        else
+        {
+            std::cerr << "No IMSLIC parameter specified." << std::endl;
+            return -1;
+        }
+
+        if (vm.count("out"))
+        {
+            path_out = vm["out"].as<fs::path>();
+            path_out_parent = path_out.parent_path();
+            if (fs::exists(path_out) && fs::is_directory(path_out))
+            {
+                std::cerr << "Output path exists but is a directory." << std::endl;
+                return -1;
+            }
+        }
+        else
+        {
+            std::cerr << "No output path specified." << std::endl
+                << desc << std::endl;
+        }
     }
     else
     {
-      std::cerr << "No grid cell size specified." << std::endl;
-      return -1;
+        if (vm.count("size"))
+        {
+            grid_size = vm["size"].as<int>();
+        }
+        else
+        {
+            std::cerr << "No grid cell size specified." << std::endl;
+            return -1;
+        }
+
+        if (vm.count("out"))
+        {
+            path_out = vm["out"].as<fs::path>();
+            path_out_parent = path_out.parent_path();
+            if (fs::exists(path_out) && fs::is_directory(path_out))
+            {
+                std::cerr << "Output path exists but is a directory." << std::endl;
+                return -1;
+            }
+        }
+        else
+        {
+            std::cerr << "No output path specified." << std::endl
+                << desc << std::endl;
+        }
+
+        if (vm.count("load_full_state"))
+        {
+            path_full_state = vm["load_full_state"].as<fs::path>();
+
+            if (!fs::exists(path_full_state) || !fs::is_regular_file(path_full_state))
+            {
+                std::cerr << "Full state JSON path does not exist or is no regular file." << std::endl
+                    << desc << std::endl;
+                return -1;
+            }
+        }
+
+        if (vm.count("load_partial_state"))
+        {
+            path_partial_state = vm["load_partial_state"].as<fs::path>();
+
+            if (!fs::exists(path_partial_state) || !fs::is_regular_file(path_partial_state))
+            {
+                std::cerr << "Partial state JSON path does not exist or is no regular file." << std::endl
+                    << desc << std::endl;
+                return -1;
+            }
+        }
     }
 
-    EZGrid ez_grid(image, image_filtered, grid_size, path_out);
+
+
+    
+    EZGrid ez_grid(image, image_filtered, grid_size, path_out, patch_count, max_iter, threshold, param, max_iter > 0);
 
     if (fs::exists(path_partial_state))
     {

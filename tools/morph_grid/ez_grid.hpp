@@ -41,7 +41,7 @@ struct EZGridData
 class EZGrid : public Serializable
 {
 public:
-    EZGrid(cv::Mat image, cv::Mat image_filtered, int grid_size, const boost::filesystem::path& path_out);
+    EZGrid(cv::Mat image, cv::Mat image_filtered, int grid_size, const boost::filesystem::path& path_out, int patch_count, int max_iter, int threshold, float param, bool voronoi);
 
     void run();
     void load_partial_state(const boost::filesystem::path& path);
@@ -62,6 +62,7 @@ private:
     boost::filesystem::path m_path_out;
 
     bool SUPERPIXELS;
+    bool m_voronoi;
 };
 
 #endif /* EZ_GRID_HPP_ */

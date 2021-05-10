@@ -65,11 +65,14 @@ public:
 
 class VoronoiTessellation {
 public:
-	VoronoiTessellation(cv::Mat image, int seed_count) :
+	VoronoiTessellation(cv::Mat image, int seed_count, int max_iter, int threshold, float param) :
 		m_image(image),
 		m_width(image.cols),
 		m_height(image.rows),
-		m_seed_count(seed_count)
+		m_seed_count(seed_count),
+		m_max_iter(max_iter),
+		m_threshold(threshold),
+		m_param(param)
 	{}
 
 	/**
@@ -282,6 +285,9 @@ private:
 	const int m_width;
 	const int m_height;
 	const int m_seed_count;
+	int m_max_iter;
+	int m_threshold;
+	float m_param;
 
 	vector<vector<Point2f>> facets;
 	vector<Point2f> centers;
@@ -291,9 +297,9 @@ private:
 	vector<Point2f> curr_seeds;
 
 	// IMSLIC Params
-	const int ITER_MAX = 10;
-	const int SIZE_TRESHOLD = 50;
-	const float Ns = 0.5f;
+	const int ITER_MAX = m_max_iter;
+	const int SIZE_TRESHOLD = m_threshold;
+	const float Ns = m_param; //0.15f
 	const float Nc = 1.0f;
 };
 

@@ -33,10 +33,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 namespace fs = boost::filesystem;
 namespace pt = boost::property_tree;
 
-EZGrid::EZGrid(cv::Mat image, cv::Mat image_filtered, int grid_size, const boost::filesystem::path& path_out) :
+EZGrid::EZGrid(cv::Mat image, cv::Mat image_filtered, int grid_size, const boost::filesystem::path& path_out, int patch_count, int max_iter, int threshold, float param, bool voronoi) :
     m_window_name("ezGrid 0.1"),
     m_gui_name("Parameters"),
-    m_path_out(path_out)
+    m_path_out(path_out),
+    m_voronoi(voronoi)
 {
     cv::namedWindow(m_window_name, cv::WINDOW_AUTOSIZE);
     cv::namedWindow(m_gui_name, cv::WINDOW_AUTOSIZE);
@@ -45,7 +46,9 @@ EZGrid::EZGrid(cv::Mat image, cv::Mat image_filtered, int grid_size, const boost
     m_canny_bilateral_future = std::make_unique<CannyFuture>(m_gui_name, "cannyBilateral");
     m_canny_filtered_future = std::make_unique<CannyFuture>(m_gui_name, "cannyFiltered");
     m_morph_grid_future = std::make_unique<MorphGridFuture>(m_window_name, image, grid_size);
-    m_voronoi_tessellation = std::make_unique<VoronoiTessellation>(image, 200);
+  
+    if(m_voronoi)
+        m_voronoi_tessellation = std::make_unique<VoronoiTessellation>(image, patch_count, max_iter, threshold, param);
 
     SUPERPIXELS = true;
 
@@ -59,22 +62,24 @@ void EZGrid::run()
     Timer<boost::milli> t;
     int remaining = 1;
 
-    std::vector<cv::Point2f> samples = m_voronoi_tessellation->start(100, SUPERPIXELS);
-    std::vector<std::vector<Point2f>> facets = m_voronoi_tessellation->get_facets();
-    std::vector<PatchRegion> patches;
-    if (SUPERPIXELS) {
-        m_morph_grid_future->SUPERPIXELS = true;
-        std::vector<std::vector<int>> labels = m_voronoi_tessellation->get_pixels();
-        m_morph_grid_future->set_poisson_samples(samples, facets, labels);
-        patches = m_voronoi_tessellation->compute_imslic_patches();
-    }
-    else {
-        m_morph_grid_future->set_poisson_samples(samples, facets);
-        patches = m_voronoi_tessellation->compute_patches();
-    }
+    if(m_voronoi){
+        std::vector<cv::Point2f> samples = m_voronoi_tessellation->start(100, SUPERPIXELS);
+        std::vector<std::vector<Point2f>> facets = m_voronoi_tessellation->get_facets();
+        std::vector<PatchRegion> patches;
+        if (SUPERPIXELS) {
+            m_morph_grid_future->SUPERPIXELS = true;
+            std::vector<std::vector<int>> labels = m_voronoi_tessellation->get_pixels();
+            m_morph_grid_future->set_poisson_samples(samples, facets, labels);
+            patches = m_voronoi_tessellation->compute_imslic_patches();
+        }
+        else {
+            m_morph_grid_future->set_poisson_samples(samples, facets);
+            patches = m_voronoi_tessellation->compute_patches();
+        }
 
-    DataGrid<unsigned char> grid = m_voronoi_tessellation->compute_grid();
-    m_morph_grid_future->set_output(grid, patches);
+        DataGrid<unsigned char> grid = m_voronoi_tessellation->compute_grid();
+        m_morph_grid_future->set_output(grid, patches);
+    }
 
     do
     {
@@ -116,7 +121,8 @@ void EZGrid::run()
         /*
         * Morph grid loop.
         */
-        //m_morph_grid_future->loop();
+        if(!m_voronoi)
+            m_morph_grid_future->loop();
 
         /*
          * Save state if necessary.
