@@ -97,7 +97,7 @@ cv::Mat GaborFilterBank::draw() const
       cv::Mat kernel;
       
 
-      cv::normalize(m_gabor_filters(y, x).kernel_real, kernel, 1.0, 0.0, CV_MINMAX);
+      cv::normalize(m_gabor_filters(y, x).kernel_real, kernel, 1.0, 0.0, cv::NORM_MINMAX);
       //minmax(kernel);
 
       cv::Rect rect_target(x * max_cols, y * max_rows, kernel.cols, kernel.rows);

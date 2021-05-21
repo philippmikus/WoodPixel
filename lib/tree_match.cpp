@@ -31,6 +31,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <numeric>
 #include <set>
 
+#include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/format.hpp>
 #include <boost/property_tree/json_parser.hpp>
@@ -46,11 +47,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "generate_patches.hpp"
 #include "histogram.hpp"
 #include "line_segment_detect.hpp"
-#include "match.hpp"
 #include "opencv_extra.hpp"
 #include "texture.hpp"
 #include "timer.hpp"
 
+namespace po = boost::program_options;
 namespace fs = boost::filesystem;
 namespace pt = boost::property_tree;
 
@@ -81,7 +82,7 @@ cv::Mat TreeMatch::compute_priority_map(const cv::Mat& texture_in)
 {
   cv::Mat texture;
   texture_in.convertTo(texture, CV_32FC3, 1.0 / 65535.0);
-  cv::cvtColor(texture, texture, CV_BGR2GRAY);
+  cv::cvtColor(texture, texture, cv::COLOR_BGR2GRAY);
 
   cv::GaussianBlur(texture, texture, cv::Size(3, 3), 0.0);
   cv::Laplacian(texture, texture, CV_32FC1);
@@ -280,6 +281,172 @@ bool TreeMatch::find_next_patch()
   }
 
   return true;
+}
+
+void TreeMatch::add_additional_textures(const boost::filesystem::path& path) {
+    pt::ptree root;
+    pt::read_json(path.string(), root);
+
+    fs::path path_json = path.parent_path();
+
+    typedef struct
+    {
+        std::string id;
+        fs::path path_texture;
+        fs::path path_mask;
+        double scale;
+        double dpi;
+        TextureMarker markers;
+    } texture_json_t;
+
+    std::vector<texture_json_t> sources_json;
+
+    int num_source_rotations;
+
+    double weight_intensity;
+    double weight_sobel;
+    double weight_gabor;
+    double histogram_matching;
+
+    for (const auto& tree_source : root.get_child("source_textures"))
+    {
+        texture_json_t t;
+
+        if (tree_source.second.count("json"))
+        {
+            pt::ptree tree_texture_json;
+            fs::path path_texture_json = tree_source.second.get<fs::path>("json");
+
+            if (!fs::exists(path_texture_json))
+            {
+                path_texture_json = path_json / path_texture_json;
+            }
+
+            pt::read_json(path_texture_json.string(), tree_texture_json);
+
+            if (tree_texture_json.count("id") > 0)
+            {
+                t.id = tree_texture_json.get<std::string>("id");
+            }
+            else
+            {
+                t.id = "";
+            }
+
+            t.path_texture = tree_texture_json.get<fs::path>("img_name");
+            t.path_mask = tree_texture_json.get<fs::path>("mask_name");
+            t.markers.load(path_texture_json.parent_path(), tree_texture_json);
+            t.dpi = tree_texture_json.get<double>("dpi");
+            t.scale = tree_source.second.get<double>("scale");
+
+            if (!fs::exists(t.path_texture))
+            {
+                t.path_texture = path_texture_json.parent_path() / t.path_texture;
+            }
+
+            if (!fs::exists(t.path_mask))
+            {
+                t.path_mask = path_texture_json.parent_path() / t.path_mask;
+            }
+        }
+        else
+        {
+            t.path_texture = tree_source.second.get<fs::path>("img_name");
+
+            if (tree_source.second.count("mask_name"))
+            {
+                t.path_mask = tree_source.second.get<fs::path>("mask_name");
+            }
+
+            if (tree_source.second.count("markers_px"))
+            {
+                t.markers.load(path_json, tree_source.second);
+            }
+
+            if (tree_source.second.count("id"))
+            {
+                t.id = tree_source.second.get<std::string>("id");
+            }
+
+            t.dpi = tree_source.second.get<double>("dpi");
+            t.scale = tree_source.second.get<double>("scale");
+
+            if (!fs::exists(t.path_texture))
+            {
+                t.path_texture = path_json / t.path_texture;
+            }
+
+            if (!fs::exists(t.path_mask))
+            {
+                t.path_mask = path_json / t.path_mask;
+            }
+        }
+
+        sources_json.push_back(t);
+    }
+
+    num_source_rotations = root.get<int>("num_source_rotations");
+    weight_intensity = root.get<double>("weight_intensity");
+    weight_sobel = root.get<double>("weight_sobel");
+    weight_gabor = root.get<double>("weight_gabor");
+    histogram_matching = root.get<double>("histogram_matching");
+
+    for (const texture_json_t& t : sources_json)
+    {
+        add_texture(t.path_texture, t.path_mask, t.dpi, t.scale, num_source_rotations, t.markers, t.id);
+    }
+    compute_responses(weight_intensity, weight_sobel, weight_gabor, histogram_matching);
+}
+
+void TreeMatch::step_back() {
+    unmask_patch_resources(m_patches.back());
+    m_reconstruction_regions.push_front(m_patches.back().region_target);
+    m_patches.pop_back();
+}
+
+void TreeMatch::pause_loop() {
+    bool key_update = false;
+    int m_key = -1;
+    Timer<boost::milli> t;
+    int remaining = 1;
+
+    std::cout << "Press l to add new textures";
+
+    while (true) {
+        int key = cv::waitKey(remaining);
+        t.restart();
+        if (key != -1) {
+            key_update = true;
+            m_key = key;
+        }
+
+        if (key == 'k') {
+            step_back();
+            for (int i = 0; i < m_targets.size(); ++i)
+            {
+                cv::Mat image = draw(i, true);
+                cv::imshow((boost::format("Image %04d") % i).str(), image);
+            }
+        }
+
+        if (key == 'l') {
+            std::string in;
+            std::cout << "Enter texture path: ";
+            std::cin >> in;
+
+            po::variables_map vm;
+            fs::path path(in);
+
+            add_additional_textures(path);
+
+            std::cout << "Press p to continue";
+        }
+
+        if (key == 'p') {
+            break;
+        }
+        remaining = std::max(static_cast<int>(16.0f - t.duration().count()), 1);
+    }
 }
 
 bool TreeMatch::find_next_patch_adaptive()
@@ -656,7 +823,7 @@ cv::Mat TreeMatch::draw_patch(const Patch& patch) const
 static cv::Mat warp_nn(cv::Mat mat, cv::Mat transformation, cv::Size size)
 {
   cv::Mat result;
-  cv::warpAffine(mat, result, transformation, size, CV_INTER_NN);
+  cv::warpAffine(mat, result, transformation, size, 0);
   return result;
 }
 
@@ -1282,8 +1449,8 @@ TreeMatch TreeMatch::load(const boost::filesystem::path& path, bool load_texture
           t.id = "";
         }
         
-        t.path_texture = tree_texture_json.get<fs::path>("texture");
-        t.path_mask = tree_texture_json.get<fs::path>("mask");
+        t.path_texture = tree_texture_json.get<fs::path>("img_name");
+        t.path_mask = tree_texture_json.get<fs::path>("mask_name");
         t.markers.load(path_texture_json.parent_path(), tree_texture_json);
         t.dpi = tree_texture_json.get<double>("dpi");
         t.scale = tree_source.second.get<double>("scale");
@@ -1300,14 +1467,14 @@ TreeMatch TreeMatch::load(const boost::filesystem::path& path, bool load_texture
       }
       else
       {
-        t.path_texture = tree_source.second.get<fs::path>("texture");
+        t.path_texture = tree_source.second.get<fs::path>("img_name");
         
-        if (tree_source.second.count("mask"))
+        if (tree_source.second.count("mask_name"))
         {
-          t.path_mask = tree_source.second.get<fs::path>("mask");  
+          t.path_mask = tree_source.second.get<fs::path>("mask_name");  
         }
 
-        if (tree_source.second.count("markers_pixel"))
+        if (tree_source.second.count("markers_px"))
         {
           t.markers.load(path_json, tree_source.second);
         }

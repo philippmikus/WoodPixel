@@ -10,7 +10,6 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
-
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -25,6 +24,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #endif
 
 #include <list>
+#include <C:\opencv\build\install\include\opencv2\highgui\highgui_c.h>
 
 #include "hough_circle_detect.hpp"
 
@@ -36,7 +36,7 @@ std::vector<cv::Vec3f> HoughCircleDetect::compute(const cv::Mat& image, double p
   int circle_radius_min = static_cast<int>(0.9 * circle_radius_pixel);
   int circle_radius_max = static_cast<int>(1.1 * circle_radius_pixel);
 
-	cv::HoughCircles(image, circle_vec, CV_HOUGH_GRADIENT, 2.0, 25.0, param_1, param_2, circle_radius_min, circle_radius_max);
+	cv::HoughCircles(image, circle_vec, 3, 2.0, 25.0, param_1, param_2, circle_radius_min, circle_radius_max);
 
 	return circle_vec;
 }

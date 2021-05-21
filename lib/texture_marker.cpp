@@ -29,11 +29,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 boost::property_tree::ptree TextureMarker::save(const boost::filesystem::path& base_path, const boost::filesystem::path& path) const
 {
   boost::property_tree::ptree tree;
-  serialize(tree, "markers_pixel", markers_pix, base_path, path);
+  serialize(tree, "markers_px", markers_pix, base_path, path);
   return tree;
 }
 
 void TextureMarker::load(const boost::filesystem::path& base_path, const boost::property_tree::ptree& tree)
 {
-  deserialize(tree, "markers_pixel", markers_pix, base_path);
+  deserialize(tree, "markers_px", markers_pix, base_path);
 }

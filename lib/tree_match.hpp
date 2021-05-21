@@ -33,7 +33,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "feature_evaluator.hpp"
 #include "gabor_filter_bank.hpp"
 #include "grid.hpp"
-#include "match.hpp"
 #include "patch.hpp"
 #include "texture.hpp"
 
@@ -56,6 +55,10 @@ public:
 
   bool find_next_patch();
   bool find_next_patch_adaptive();
+
+  void add_additional_textures(const boost::filesystem::path& path);
+  void pause_loop();
+  void step_back();
 
   cv::Mat fit_single_patch(const boost::filesystem::path& path);
 

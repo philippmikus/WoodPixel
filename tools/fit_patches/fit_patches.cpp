@@ -34,6 +34,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <boost/property_tree/ptree.hpp>
 
 #include "tree_match.hpp"
+#include "timer.hpp"
 
 //const float pi = boost::math::constants::pi<float>();
 
@@ -213,10 +214,28 @@ int main(int argc, char* argv[])
   matcher.target().response.render();
   matcher.textures()[0][0].response.render();
   */
+  bool key_update = false;
+  int m_key = -1;
+  Timer<boost::milli> t;
+  int remaining = 1;
+
+  bool stop = false;
+
   try
   {
     while (matcher.find_next_patch_adaptive())
     {
+      int key = cv::waitKey(remaining);
+      t.restart();
+      if (key != -1) {
+          key_update = true;
+          m_key = key;
+      }
+      if (key == 'p') {
+          matcher.pause_loop();
+          m_key = -1;
+      }
+        
       if (steps)
       {
         static int iteration;
@@ -236,7 +255,7 @@ int main(int argc, char* argv[])
 
         std::vector<Patch> patches_temp = patches_old;
         patches_temp.insert(patches_temp.end(), matcher.patches().begin(), matcher.patches().end());
-
+        
         std::vector<cv::Mat> masked_textures = matcher.draw_masked_textures_patch_last(
           patches_temp,
           cv::Scalar::all(0.0), 0.5,
@@ -273,6 +292,7 @@ int main(int argc, char* argv[])
           break;
         }
       }
+      remaining = std::max(static_cast<int>(16.0f - t.duration().count()), 1);
     }
 
     for (int i = 0; i < matcher.num_targets(); ++i)
