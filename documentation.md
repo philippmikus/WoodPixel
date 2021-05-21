@@ -11,12 +11,8 @@ Install packages:
 Configure/generate project using CMake, open the created solution in Visual Studio and build the project. Make sure to build Boost as well as the WoodPixel project in release mode.
 
 # The Pipeline
-```mermaid
-graph LR
-A(Morph Grid) --> B(Fit Patches)
-B --> C(Render Target)
-B --> D(Export for Fabrication)
-```
+![alt](https://github.com/philippmikus/WoodPixel/flowchart.PNG?raw=true)
+
 The Wood Pixel pipeline consists of different tools which can be run in succesion via the command line using certain input parameters. Usually the tools output a JSON file and folders containing data that can be used as an input in the pipeline's following steps.
 
 ## 1. morph_grid
