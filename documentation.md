@@ -44,7 +44,7 @@ The morph_grid tool is used to segment an input image into patches to be used in
  - ez_grid: folder containing patch masks + filtered images
 
 **For standard morph grid:**
-When running the standard morph grid version. A window ("EZgrid") will open, which allows to interactively edit the image's segementation. The following key bindings can be used to change the apperance of the image and edit the segmentation grid:
+When running the standard morph grid version a window ("EZgrid") will open, which allows to interactively edit the image's segementation. The following key bindings can be used to change the apperance of the image and edit the segmentation grid:
 
  - "1": Show input image
  - "2": Switch to bilateral filter image.
