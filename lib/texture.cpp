@@ -391,6 +391,11 @@ cv::Vec3b Texture::interpolate_texture(const cv::Point2f& p) const
   return cv::Vec3b(255.0f * c);
 }
 
+void Texture::set_type(int type)
+{
+    m_type = type;
+}
+
 boost::property_tree::ptree Texture::save(const boost::filesystem::path& base_path, const boost::filesystem::path& path) const
 {
   boost::property_tree::ptree tree;

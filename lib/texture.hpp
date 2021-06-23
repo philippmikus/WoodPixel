@@ -61,6 +61,7 @@ public:
     transformation_matrix_inv = cv::Mat::eye(2, 3, CV_64FC1);
     angle_rad = 0.0;
     this->filename = filename;
+    m_type = -1;
   }
 
   Texture(const boost::filesystem::path& filename, const boost::filesystem::path& filename_mask, double dpi, double scale, TextureMarker marker=TextureMarker(), const std::string id=std::string()) :
@@ -113,6 +114,8 @@ public:
   std::vector<cv::Vec3f> find_markers(double marker_size_mm, int num_markers);
 
   cv::Vec3b interpolate_texture(const cv::Point2f& p) const;
+
+  void set_type(int type);
   
   cv::Mat texture;
   cv::Mat mask_done;
@@ -126,6 +129,8 @@ public:
   double angle_rad;
   double scale;
   double dpi;
+  
+  int m_type;
 
   FeatureVector response;
 
