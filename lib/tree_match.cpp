@@ -90,6 +90,12 @@ cv::Mat TreeMatch::compute_priority_map(const cv::Mat& texture_in)
   return texture;
 }
 
+float TreeMatch::get_average_cost(int type)
+{
+    float cost_sum = std::accumulate(costs_per_panel[type].begin(), costs_per_panel[type].end(), 0.f);
+    return cost_sum / costs_per_panel[type].size();
+}
+
 void TreeMatch::add_texture(const boost::filesystem::path& path, double dpi, double scale, int num_rotations, const TextureMarker& marker, const std::string id)
 {
   m_textures.emplace_back();
@@ -281,6 +287,151 @@ bool TreeMatch::find_next_patch()
   }
 
   return true;
+}
+
+void TreeMatch::load_potential_textures(const boost::filesystem::path& path) {
+    pt::ptree root;
+    pt::read_json(path.string(), root);
+
+    fs::path path_json = path.parent_path();
+
+    int num_source_rotations;
+    int num_texture_types = root.get<int>("num_texture_types");
+
+    std::vector<std::vector<texture_json_t>> sources_json(num_texture_types);
+    printf("num_texture_types %d\n", num_texture_types);
+    for (int type = 0; type < num_texture_types; type++) {
+        printf("loading texture json type %d\n", type);
+        for (const auto& tree_source : root.get_child("source_textures" + std::to_string(type)))
+        {
+            printf("test %d\n", type);
+            texture_json_t t;
+
+            if (tree_source.second.count("json"))
+            {
+                pt::ptree tree_texture_json;
+                fs::path path_texture_json = tree_source.second.get<fs::path>("json");
+
+                if (!fs::exists(path_texture_json))
+                {
+                    path_texture_json = path_json / path_texture_json;
+                }
+
+                pt::read_json(path_texture_json.string(), tree_texture_json);
+
+                if (tree_texture_json.count("id") > 0)
+                {
+                    t.id = tree_texture_json.get<std::string>("id");
+                }
+                else
+                {
+                    t.id = "";
+                }
+
+                t.path_texture = tree_texture_json.get<fs::path>("img_name");
+                t.path_mask = tree_texture_json.get<fs::path>("mask_name");
+                t.markers.load(path_texture_json.parent_path(), tree_texture_json);
+                t.dpi = tree_texture_json.get<double>("dpi");
+                t.scale = tree_source.second.get<double>("scale");
+
+                if (!fs::exists(t.path_texture))
+                {
+                    t.path_texture = path_texture_json.parent_path() / t.path_texture;
+                }
+
+                if (!fs::exists(t.path_mask))
+                {
+                    t.path_mask = path_texture_json.parent_path() / t.path_mask;
+                }
+            }
+            else
+            {
+                t.path_texture = tree_source.second.get<fs::path>("img_name");
+
+                if (tree_source.second.count("mask_name"))
+                {
+                    t.path_mask = tree_source.second.get<fs::path>("mask_name");
+                }
+
+                if (tree_source.second.count("markers_px"))
+                {
+                    t.markers.load(path_json, tree_source.second);
+                }
+
+                if (tree_source.second.count("id"))
+                {
+                    t.id = tree_source.second.get<std::string>("id");
+                }
+
+                t.dpi = tree_source.second.get<double>("dpi");
+                t.scale = tree_source.second.get<double>("scale");
+                t.num_source_rotations = root.get<int>("num_source_rotations");
+
+                if (!fs::exists(t.path_texture))
+                {
+                    t.path_texture = path_json / t.path_texture;
+                }
+
+                if (!fs::exists(t.path_mask))
+                {
+                    t.path_mask = path_json / t.path_mask;
+                }
+            }
+         
+            sources_json[type].push_back(t);
+        }
+    }
+
+    num_source_rotations = root.get<int>("num_source_rotations");
+    weight_intensity = root.get<double>("weight_intensity");
+    weight_sobel = root.get<double>("weight_sobel");
+    weight_gabor = root.get<double>("weight_gabor");
+    histogram_matching = root.get<double>("histogram_matching");
+
+    for (int type = 0; type < num_texture_types; type++) {
+        potential_textures_per_wood_type.push_back(std::queue<texture_json_t>());
+        for (const texture_json_t& t : sources_json[type])
+        {
+            potential_textures_per_wood_type[type].push(t);
+        }
+    }
+    manage_textures();
+    compute_responses(weight_intensity, weight_sobel, weight_gabor, histogram_matching);
+}
+
+void TreeMatch::manage_textures() {
+    // loading initial source textures
+    if (m_textures.empty()) {
+        for (int i = 0; i < potential_textures_per_wood_type.size(); i++) {
+            printf("add initial texture type %d\n", i);
+            if (potential_textures_per_wood_type[i].empty()) continue;
+            texture_json_t tex = potential_textures_per_wood_type[i].front();
+            potential_textures_per_wood_type[i].pop();
+            add_texture(tex.path_texture, tex.dpi, tex.scale, tex.num_source_rotations, tex.markers, tex.id);
+            m_textures.back().front().set_type(i);
+
+            load_tex.push_back(0);
+            costs_per_panel.push_back(std::vector<double>());
+            amount_used_per_panel.push_back(0.f);
+            total_amount_per_panel.push_back(float(m_textures.back().front().texture.rows * m_textures.back().front().texture.cols));
+        }
+    }
+    // loading additional source textures
+    else {
+        for (int i = 0; i < load_tex.size(); i++) {
+            if (load_tex[i] == 1) {
+                printf("Adding texture for type %d\n", i);
+                if (potential_textures_per_wood_type[i].empty()) continue;
+                texture_json_t tex = potential_textures_per_wood_type[i].front();
+                potential_textures_per_wood_type[i].pop();
+                add_texture(tex.path_texture, tex.dpi, tex.scale, tex.num_source_rotations, tex.markers, tex.id);
+                m_textures.back().front().set_type(i);
+                total_amount_per_panel[i] += float(m_textures.back().front().texture.rows * m_textures.back().front().texture.cols);
+                load_tex[i] = 0;
+                compute_responses(weight_intensity, weight_sobel, weight_gabor, histogram_matching);
+            }
+        }
+    }
 }
 
 void TreeMatch::add_additional_textures(const boost::filesystem::path& path) {
@@ -590,7 +741,7 @@ Patch TreeMatch::match_patch_impl(const PatchRegion& region, cv::Mat mask)
       results.emplace_back(static_cast<int>(i), static_cast<int>(j));
     }
   }
-   
+
   #pragma omp parallel for
   for (int i = 0; i < static_cast<int>(results.size()); ++i)
   {
@@ -612,15 +763,32 @@ Patch TreeMatch::match_patch_impl(const PatchRegion& region, cv::Mat mask)
       cv::minMaxLoc(match, &results[i].cost, 0, &results[i].texture_pos, 0, texture_mask);
     }
   }
-
+  
   MatchPatchResult result_min = *std::min_element(results.begin(), results.end(), [](const MatchPatchResult& lhs, const MatchPatchResult& rhs){return lhs.cost < rhs.cost; });
-
 
   if (result_min.cost == std::numeric_limits<double>::max())
   {
     std::cout << "Finished. No more texture samples available." << std::endl;
   }
+  
+  if (automatic_loading) {
+      int type = m_textures[result_min.texture_index].front().m_type;
+      if (type > -1) {
+          costs_per_panel[type].push_back(result_min.cost);
+          amount_used_per_panel[type] += kernel.response.size().width * kernel.response.size().height;
+      }
 
+      float avg_cost = get_average_cost(type);
+      float fraction_used = amount_used_per_panel[type] / total_amount_per_panel[type];
+
+      printf("%d: Avg: %f; current: %f; amount: %f\n", type, avg_cost, result_min.cost, fraction_used);
+
+      if (result_min.cost > 1.5 * avg_cost && fraction_used > 0.5) {
+          load_tex[type] = 1;
+          printf("load_tex true %d\n", type);
+      }
+  }
+  
   const cv::Mat error_mat = m_targets[region.target_index()].response(region.bounding_box()).dist_sqr_mat(m_textures[result_min.texture_index][result_min.texture_rot].response(cv::Rect(result_min.texture_pos, region.bounding_box().size())));
 
   Patch patch(region, result_min.texture_pos, m_textures[result_min.texture_index][result_min.texture_rot].transformation_matrix, result_min.texture_index, result_min.texture_rot, error_mat, result_min.cost);
@@ -1626,6 +1794,8 @@ TreeMatch TreeMatch::load(const boost::filesystem::path& path, bool load_texture
     for (const texture_json_t& t : sources_json)
     {
       matcher.add_texture(t.path_texture, t.path_mask, t.dpi, t.scale, num_source_rotations, t.markers, t.id);
+      matcher.costs_per_panel.push_back(std::vector<double>());
+      matcher.amount_used_per_panel.push_back(0);
     }
     matcher.compute_responses(weight_intensity, weight_sobel, weight_gabor, histogram_matching);
   }

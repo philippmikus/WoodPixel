@@ -179,8 +179,10 @@ int main(int argc, char* argv[])
 
   std::vector<Patch> patches_old = load_patches(paths_patches);
 
-  TreeMatch matcher = TreeMatch::load(path_in, true);
-
+  bool automatic_loading = true;
+  TreeMatch matcher = TreeMatch::load(path_in, !automatic_loading);
+  if(automatic_loading)
+    matcher.load_potential_textures(path_in);
 
   for (int i = 0; i < matcher.num_targets(); ++i)
   {
@@ -220,11 +222,13 @@ int main(int argc, char* argv[])
   int remaining = 1;
 
   bool stop = false;
-
+  
   try
   {
     while (matcher.find_next_patch_adaptive())
     {
+      if (automatic_loading)
+        matcher.manage_textures();
       int key = cv::waitKey(remaining);
       t.restart();
       if (key != -1) {

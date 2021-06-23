@@ -44,7 +44,7 @@ The morph_grid tool is used to segment an input image into patches to be used in
  - ez_grid: folder containing patch masks + filtered images
 
 **For standard morph grid:**
-When running the standard morph grid version a window ("EZgrid") will open, which allows to interactively edit the image's segementation. The following key bindings can be used to change the apperance of the image and edit the segmentation grid:
+When running the standard morph grid version. A window ("EZgrid") will open, which allows to interactively edit the image's segementation. The following key bindings can be used to change the apperance of the image and edit the segmentation grid:
 
  - "1": Show input image
  - "2": Switch to bilateral filter image.
@@ -100,9 +100,28 @@ The fit_patches tool uses the morph_grid output to fit wood material to the give
 
 The computed patches from the morph_grid step will be fitted successively. Fitting a single Patch typically takes 0.5s to 3s, depending on pixel amount in the patches and the amount of provided wood samples. After completion the results are saved to the output directory.
 
-*[EXTENSION]*
+*[Manual source texture adding]*
 If the fit_patches extension is available, this process may be interrupted by pressing 'p'. After that individual fitting steps can be reverted one by one by pressing 'k'. It is then possible to load additional source textures by pressing 'l' and entering the path to the JSON file describing the additional textures in the console. This file is similar to fit_patches input JSON file, but descriptions regarding the target can be omitted. After that the process can be resumed by pressing 'p' again. 
 &ensp; This extension is useful if the visualisation shows that after some time the initially provided wood samples are exhausted and fitted patches do no longer match the target well enough.
+
+*[Automatic source texture adding]*
+It is also possible to automate the adding of source textures. In this case the source textures can be seperated into different (wood) types to be able to load new textures of them individually. For this the input json describes pools of possible textures of each different texture type:
+
+```
+"source_textures": [],
+"source_textures0": [
+    {
+	"json": "pathToJSON",
+	"scale": scale
+	}, ...
+]
+"source_textures1": [...]
+...
+"source_texturesN": [...]
+"num_texture_types": N
+...
+```
+The program initially loads the first described texture of each type. During the fitting process additional textures will be loaded, if available, based on two metrics. The first metric takes the average fitting cost of the texture types into account. If the cost of a new fit exceeds this average by a set margin the first condition is fulfilled. The second metric simply looks at the percentage amount of each texture type that is already used. If the used amount also exceeds a set value, both conditions are fulfilled and a new texture of this type will be loaded into the matcher.
 
 ## 3. render_target
 

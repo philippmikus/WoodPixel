@@ -36,6 +36,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "patch.hpp"
 #include "texture.hpp"
 
+namespace fs = boost::filesystem;
+
 class TreeMatch
 {
 public:
@@ -56,9 +58,13 @@ public:
   bool find_next_patch();
   bool find_next_patch_adaptive();
 
+  void load_potential_textures(const boost::filesystem::path& path);
+  void manage_textures();
   void add_additional_textures(const boost::filesystem::path& path);
   void pause_loop();
   void step_back();
+
+  float get_average_cost(int type);
 
   cv::Mat fit_single_patch(const boost::filesystem::path& path);
 
@@ -120,6 +126,17 @@ public:
   void sort_patches_by_saliency();
   void sort_patches_by_center_distance();
 
+  typedef struct
+  {
+      std::string id;
+      fs::path path_texture;
+      fs::path path_mask;
+      double scale;
+      double dpi;
+      TextureMarker markers;
+      int num_source_rotations;
+  } texture_json_t;
+
 private:
   void mask_patch_resources(const Patch& patch);
   void mask_patch_resources(const AdaptivePatch& adaptive_patch);
@@ -149,6 +166,19 @@ private:
 
   GaborFilterBank m_filter_bank;
   std::vector<Patch> m_patches;
+
+  double weight_intensity;
+  double weight_sobel;
+  double weight_gabor;
+  double histogram_matching;
+
+  bool automatic_loading = true;
+  std::vector<std::vector<double>> costs_per_panel;
+  std::vector<double> amount_used_per_panel;
+  std::vector<double> total_amount_per_panel;
+  std::vector<int> load_tex;
+  
+  std::vector<std::queue<texture_json_t>> potential_textures_per_wood_type;
 };
 
 #endif /* TRLIB_TREE_MATCH_HPP_ */
